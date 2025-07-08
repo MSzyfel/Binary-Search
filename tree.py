@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+from itertools import combinations
+
 import networkx as nx
 
 
 class Tree(nx.DiGraph):
+    def __init__(self, incoming_graph_data=None, **attr):
+        super().__init__(incoming_graph_data, attr)
+        self.r = None
+
     def __hash__(self):
         nodes = sorted(self.nodes)
         g_hash = 0
@@ -14,12 +20,21 @@ class Tree(nx.DiGraph):
                 node_iterator = node_iterator + 1
         return g_hash
 
-    def find_root(self):
-        return next(v for v in self.nodes if self.nodes[v].in_degree == 0)
+    def weight(self, v):
+        return self.nodes[v]['w']
 
-    def ccs(self, v) -> list[Tree]:
+    def find_root(self):
+        if self.r is None:
+            r = next(v for v in self.nodes if self.nodes[v].in_degree == 0)
+            self.r = r
+        else:
+            return self.r
+
+    def ccs(self, vertices) -> list[Tree]:
         G = self.copy()
-        G.remove_node(v)
+        if not isinstance(vertices, set):
+            vertices = set(vertices)
+        G.remove_nodes_from(vertices)
         undir_G_minus_v = G.to_undirected()
 
         subtrees = []
@@ -61,17 +76,20 @@ class Tree(nx.DiGraph):
     def is_descendant(self, ancestor, node) -> bool:
         return nx.has_path(self, source=ancestor, target=node)
 
+    def pairs_of_ordered_vertices(self, nodes: set):
+        for v in nodes:
+            for u in nodes:
+                if not self.is_descendant(v, u):
+                    yield u, v
+
     def minimal_subtree(self, terminals: set) -> Tree:
         nodes = set()
         edges = set()
 
-        for v in terminals:
-            for u in terminals:
-                if self.is_descendant(v, u):
-                    continue
-                path = nx.shortest_path(self, source=v, target=u)
-                nodes.update(path)
-                edges.update(zip(path[:-1], path[1:]))
+        for u, v in self.pairs_of_ordered_vertices(terminals):
+            path = nx.shortest_path(self, source=v, target=u)
+            nodes.update(path)
+            edges.update(zip(path[:-1], path[1:]))
 
         return self.edge_subgraph(edges).copy()
 
@@ -87,3 +105,22 @@ class Tree(nx.DiGraph):
             if self.degree(v) >= degree:
                 vertices.add(v)
         return vertices
+
+    def minimal_subtree_with_contracted_paths(self, terminals: set) -> Tree:
+        subtree = Tree()
+        subtree.add_nodes_from(terminals)
+        for u, v in self.pairs_of_ordered_vertices(terminals):
+            path_u_v = nx.shortest_path(self, source=v, target=u).nodes
+            set_of_vertices_of_path_u_v = set(path_u_v)
+            if terminals & set_of_vertices_of_path_u_v == {u, v}:
+                if len(set_of_vertices_of_path_u_v) == 2:
+                    subtree.add_edge(u, v)
+                else:
+                    l = min([set_of_vertices_of_path_u_v - {u, v}], key=lambda v: self.weight(v))
+                    subtree.add_nodes_from(l)
+                    subtree.add_edge(u, l)
+                    subtree.add_edge(l, v)
+        return subtree
+
+    def is_subtree(self, subtree: Tree) -> bool:
+        return set(self.nodes).issubset(subtree.nodes) and set(self.edges).issubset(subtree.edges)
