@@ -23,6 +23,7 @@ class Tree(nx.DiGraph):
         super().__init__()
         self.seed = None
         self.root = None
+        self.rank = None
         if isinstance(base, int | list | dict | tuple):
             if isinstance(base, int | tuple):
                 self.add_nodes_from([base])
@@ -30,12 +31,14 @@ class Tree(nx.DiGraph):
                 self.add_nodes_from(base)
             return
         super().__init__()
-        if isinstance(base, nx.DiGraph):
+        if isinstance(base, nx.DiGraph | Tree):
             nodes = list(base.nodes.data())
             self.add_nodes_from(nodes)
             self.add_edges_from(base.edges(data=True))
             self.n = len(base)
             self.root = self.get_root()
+            if isinstance(base, Tree):
+                self.rank = base.rank
             return
         self.n = n
         if n is None:
@@ -69,13 +72,13 @@ class Tree(nx.DiGraph):
             if nodes[node_iterator] == labels[i]:
                 g_hash = g_hash + 2 ** i
                 node_iterator = node_iterator + 1
-            if node_iterator==len(nodes):
+            if node_iterator == len(nodes):
                 break
         return g_hash
 
     def weight(self, v):
         if isinstance(v, tuple):
-            v=v[0]
+            v = v[0]
         return self.nodes[v]['w']
 
     def get_root(self):
@@ -103,7 +106,7 @@ class Tree(nx.DiGraph):
     def attach_subtree(self, other: Tree, v):
         root_other = other.get_root()
         if isinstance(v, tuple):
-            v=v[0]
+            v = v[0]
         self.add_nodes_from(other.nodes(data=True))
         self.add_edges_from(other.edges(data=True))
         self.add_edge(v, root_other)
@@ -204,3 +207,11 @@ class Tree(nx.DiGraph):
             edges.add((v, u))
         else:
             edges.add((u, v))
+
+    def parent(self, v):
+        if self.get_root() != v:
+            return None
+        return list(self.predecessors(v))[0]
+
+    def neighboring_edges(self, v):
+        return list(self.in_edges(v)) + list(self.out_edges(v))
