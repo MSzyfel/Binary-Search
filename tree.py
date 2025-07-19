@@ -5,6 +5,9 @@ import random
 import time
 import networkx as nx
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+
 import copy
 
 
@@ -79,7 +82,10 @@ class Tree(nx.DiGraph):
     def weight(self, v):
         if isinstance(v, tuple):
             v = v[0]
-        return self.nodes[v]['w']
+        if 'w' in self.nodes[v]:
+            return self.nodes[v]['w']
+        else:
+            return 1
 
     def get_root(self):
         r = next(v for v in self.nodes() if self.in_degree(v) == 0)
@@ -194,9 +200,15 @@ class Tree(nx.DiGraph):
     def is_subtree(self, subtree: Tree) -> bool:
         return set(self.nodes).issubset(subtree.nodes) and set(self.edges).issubset(subtree.edges)
 
-    def draw(self, orientation: str = 'vertical'):
+    def draw(self, orientation: str = 'vertical', attribute=None, type=None):
         nodes = self.nodes()
-        labels = {node: f"{node}: {self.nodes[node]['w']:.2f}" for node in nodes}  # etykiety z indeksem i wagą
+        if type == None:
+            labels = {node: f"{node}" for node in nodes}
+        if type == float:
+            labels = {node: f"{node}: {self.nodes[node][attribute]:.2f}" for node in
+                      nodes}  # etykiety z indeksem i wagą
+        if type == int:
+            labels = {node: f"{node}: {self.nodes[node][attribute]}" for node in nodes}
         source = self.get_root()
         pos = nx.bfs_layout(self, source, align=orientation)
         nx.draw(self, pos, with_labels=True, labels=labels, node_color='lightblue')
@@ -209,9 +221,46 @@ class Tree(nx.DiGraph):
             edges.add((u, v))
 
     def parent(self, v):
-        if self.get_root() != v:
+        if self.get_root() == v:
             return None
-        return list(self.predecessors(v))[0]
+        predecessors = list(self.predecessors(v))[0]
+        return predecessors
 
     def neighboring_edges(self, v):
         return list(self.in_edges(v)) + list(self.out_edges(v))
+
+    def contracted_heavy_groups(self, w) -> Tree:
+        pass
+
+    def reroot_by_min_attr(self, attr='w'):
+        # 1. Znajdź nowy root
+        new_root = min(self.nodes, key=lambda u: self.nodes[u].get(attr, float('inf')))
+
+        # 2. Zbuduj nowe drzewo jako BFS z nowego roota
+        new_tree = Tree()
+        new_tree.root = new_root
+
+        visited = set()
+        queue = [new_root]
+        visited.add(new_root)
+
+        while queue:
+            u = queue.pop(0)
+            for v in self.successors(u):
+                if v not in visited:
+                    continue  # ignorujemy krawędzie wychodzące, bo chcemy tylko dzieci w BFS z nowego roota
+            for v in self.predecessors(u):
+                if v not in visited:
+                    new_tree.add_edge(u, v)  # od nowego roota w dół
+                    visited.add(v)
+                    queue.append(v)
+
+        return new_tree
+
+    def round_values(self, round_function, attribute='w'):
+        for node in self.nodes:
+            if attribute in self.nodes[node]:
+                original_value = self.nodes[node][attribute]
+                new_value = round_function(original_value)
+                self.nodes[node][attribute] = new_value
+

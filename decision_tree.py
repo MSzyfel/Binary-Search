@@ -10,7 +10,8 @@ class DecisionTree(Tree):
         if len(self) == 1:
             return self.weight(r)
         tree_copy = self.copy()
-        return self.weight(r) + max([t.cost() for t in tree_copy.ccs(r)])
+        cost = self.weight(r) + max([DecisionTree(t).cost() for t in tree_copy.ccs(r)])
+        return cost
 
     def __lt__(self, other):
         return self.cost() < other.cost()

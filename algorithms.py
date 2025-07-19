@@ -7,6 +7,7 @@ from tree import Tree
 from decision_tree import DecisionTree
 from max_heap_object import MaxHeapObj
 import copy
+from itertools import combinations
 
 INF = float('inf')
 
@@ -68,33 +69,47 @@ def tree_search_cicalese_inspired(tree: Tree, t: int):
         return dt_y
 
 
-def calculate_ranking(tree: Tree, r, gbs: dict[int: int]) -> int:
+def calculate_ranking(tree: Tree, r, gbs: dict[int: int], lbu: dict[int: int]) -> int:
     children = list(tree.successors(r))
-    s = [calculate_ranking(tree, child, gbs) for child in children]
-    k = len(s)
+    k = len(children)
+    if k == 0:
+        tree.nodes[r]['r'] = 0
+        tree.nodes[r]['s'] = 1
+        return 1
+    s = [calculate_ranking(tree, child, gbs, lbu) for child in children]
     a = [0] * (k + 1)
     b = [0] * (k + 1)
     for i in range(1, k + 1):
-        a[i] = a[i - 1] & s[i]
-        b[i] = b[i - 1] & (a[i - 1] | s[i])
+        a[i] = a[i - 1] | s[i - 1]
+        b[i] = b[i - 1] | (a[i - 1] & s[i - 1])
     m = gbs[b[k]]
     mask = lb_mask(m)
     ak_masked = a[k] | mask
-    rank = gbs[ak_masked]
+    rank = lbu[ak_masked]
     tree.nodes[r]['r'] = rank
-    n = len(tree)
-    sr = (a[k] | (1 << m)) & (lb_mask(n - rank) << m)
+    sr = a[k]
+    sr = sr | (1 << (rank))
+    mask = ~(lb_mask(rank - 1))
+    sr = sr & mask
     tree.nodes[r]['s'] = sr
     return sr
 
 
 def calculate_gbs(n):
     n = 2 ** (ceil(log2(n)))
+    result = {0: 0}
+    for k in range(0, n):
+        gbs = k.bit_length() - 1
+        result[k] = gbs
+    return result
+
+
+def calculate_lbu(n):
+    n = 2 ** (ceil(log2(n)))
     result = {}
     for k in range(0, n):
-        x = k + 1
-        pos = (x & -x).bit_length() - 1
-        result[k] = pos
+        lbu = (~k) & (k + 1)
+        result[k] = lbu.bit_length() - 1
     return result
 
 
@@ -109,7 +124,7 @@ def bit_indices(x: int):
 
 
 def lb_mask(length):
-    return (1 << (length + 1)) - 1
+    return (1 << length + 1) - 1
 
 
 def visit(tree: Tree, v: int, f_dash, W: list, q: dict):
@@ -127,12 +142,12 @@ def visit(tree: Tree, v: int, f_dash, W: list, q: dict):
         W[i] = (None, None)
     children = list(tree.successors(v))
     for w in children:
-        w_rank = tree.nodes[w]['r']
-        W[w_rank] = (v, (v, w))
+        W[vr] = (v, (v, w))
+        visit(tree, w, vr, W, q)
         sw = tree.nodes[w]['s']
-        lb_1_sw = sw & (-sw)
+        lb_1_sw = (sw & -sw).bit_length() - 1
         if lb_1_sw < vr:
-            mask = lb_mask(vr)
+            mask = lb_mask(vr - 1)
             sw_masked = sw & mask
             gb_1_sw = sw_masked.bit_length() - 1
             q[(v, w)] = W[gb_1_sw][0]
@@ -142,40 +157,105 @@ def visit(tree: Tree, v: int, f_dash, W: list, q: dict):
     if f_dash != INF:
         W[vr] = (v, (v, tree.parent(v)))
     sv = tree.nodes[v]['s']
-    if f_dash == INF:
-        sv_masked = sv
-    else:
-        mask = lb_mask(f_dash)
-        sv_masked = sv & mask
-    for y in bit_indices(sv_masked):
-        mask = lb_mask(y)
-        sv_masked2 = sv_masked & mask
-        for x in bit_indices(sv_masked2):
-            if all(i not in sv for i in range(x + 1, y)):
-                q[W[y][1]] = W[x][0]
+    bits = bit_indices(sv)
+    for x, y in combinations(bits, 2):
+        if x < y < f_dash and all(i not in sv for i in range(x + 1, y)):
+            q[W[y][1]] = W[x][0]
 
 
-def backtrack_dt(tree: Tree, qv, q) -> DecisionTree:
+def backtrack_dt(tree: Tree, qv, q, visited_edges) -> DecisionTree:
     d = DecisionTree(qv)
     for edge in tree.neighboring_edges(qv):
-        if edge in q.keys():
+        if edge not in visited_edges:
+            if edge not in q.keys():
+                edge = (edge[1], edge[0])
             w = q[edge]
-        else:
-            u, v = edge
-            w = q[(v, u)]
-        d_w = backtrack_dt(tree, w, q)
-        d.attach_subtree(d_w, qv)
+            visited_edges.add(edge)
+            d_w = backtrack_dt(tree, w, q, visited_edges)
+            d.attach_subtree(d_w, qv)
     return d
 
 
-def calculate_unweighted_dt(tree: Tree):
+def slow_backtrack_dt(tree) -> DecisionTree:
+    v = max(list(tree.nodes(data=True)), key=lambda v: v[1]['r'])[0]
+    d = DecisionTree(v)
+    for cc in tree.ccs(v):
+        d_cc = slow_backtrack_dt(cc)
+        d.attach_subtree(d_cc, v)
+    return d
+
+
+def ranking_based_dt(tree: Tree):
     n = len(tree)
     gbs = calculate_gbs(n)
+    lbu = calculate_lbu(n)
     root = tree.get_root()
-    calculate_ranking(tree, root, gbs)
-    q = {}
-    W = [(None, None)] * (tree.rank + 1)
-    visit(tree=tree, f_dash=INF, v=root, W=W, q=q)
-    qv = max(list(tree.nodes(data=True)), key=lambda v: v['r'])
-    d = backtrack_dt(tree, qv, q)
+    sr = calculate_ranking(tree, root, gbs, lbu)
+    tree.draw(attribute='s', type=int)
+    tree.rank = gbs[sr]
+    # q = {}
+    # W = [(None, None)] * (tree.rank + 1)
+    # visit(tree=tree, f_dash=INF, v=root, W=W, q=q)
+    # qv = max(list(tree.nodes(data=True)), key=lambda v: v[1]['r'])[0]
+    # visited_edges = set()
+    # d = backtrack_dt(tree, qv, q, visited_edges)
+    d = slow_backtrack_dt(tree)
     return d
+
+
+def qptas_dereniowski_inspired(tree: Tree, epsilon=1) -> DecisionTree:
+    tree = tree.reroot_by_min_attr('w')
+    c = ceil(168 / epsilon)
+    n = len(tree)
+    step = 1 / (c * n)
+    w = step
+    dt = build_strategy(copy.deepcopy(tree), c, w, n)
+    while dt is not None:
+        w += step
+        dt = build_strategy(tree, c, w, n)
+
+
+def ceil_base(value, base):
+    return base * ceil(value / base)
+
+
+def build_strategy(tree: Tree, c, w, n) -> DecisionTree:
+    contracted_tree = tree.contracted_heavy_groups(c * w)
+    dt_lt = ranking_based_dt(contracted_tree)
+
+    def round_function(value):
+        return ceil_base(value, w) if value > c * w else ceil_base(value, 1 / (c * n))
+
+    tree.round_values(round_function)
+    dt = build_dt_lt_root(tree, dt_lt, c, w, n)
+    return dt
+
+
+def build_dt_lt_root(tree: Tree, dt_lt: DecisionTree, c, w, n) -> DecisionTree:
+    q = dt_lt.get_root()
+    dt = DecisionTree(q)
+    responses = dt_lt.query(tree)
+    for cc, dt_lt_cc in responses.items():
+        cc = Tree(cc)
+        dt_lt_cc = DecisionTree(dt_lt_cc)
+        r_cc = cc.get_root()
+        if cc.nodes(data=True)[r_cc][1]['w'] > c * w:
+            dt_cc = build_dt_h_root(cc, dt_lt_cc, c, w, n)
+        else:
+            dt_cc = build_dt_lt_root(cc, dt_lt_cc, c, w, n)
+        dt.attach_subtree(dt_cc, q)
+    return dt
+
+
+def build_dt_h_root(tree: Tree, dt_lt: DecisionTree, c, w, n) -> DecisionTree:
+    child_dts = {}
+    for node in tree.nodes(data=True):
+        child_dts[node[0]] = None
+        if node[1]['w'] <= c*w:
+            pass
+    root = tree.get_root()
+    dt = dp_timelines(tree, root)
+
+
+def dp_timelines(tree, v, i, timeline, child_dts, c, w, n):
+    pass
