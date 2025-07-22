@@ -13,18 +13,19 @@ class DecisionTree(Tree):
         cost = self.weight(r) + max([DecisionTree(t).cost() for t in tree_copy.ccs(r)])
         return cost
 
-    def __lt__(self, other):
+    def __lt__(self, other: Tree):
         return self.cost() < other.cost()
 
-    def query(self, tree) -> dict[Tree: DecisionTree]:
-        r = self.get_root()
-        t_ccs = tree.ccs(r)
-        dt_ccs = self.ccs(r)
+    def query(self, tree: Tree, excluded_responses=None) -> dict[Tree: DecisionTree]:
+        query = self.get_root()
+        t_ccs = tree.ccs(query)
+        dt_ccs = self.ccs(query)
         responses = {}
         for t in t_ccs:
-            for dt in dt_ccs:
-                if set(dt.nodes).issubset(t.nodes):
-                    responses[t] = DecisionTree(dt)
+            if excluded_responses is None or all(v not in excluded_responses for v in t.nodes()):
+                for dt in dt_ccs:
+                    if set(dt.nodes).issubset(t.nodes):
+                        responses[t] = DecisionTree(dt)
         return responses
 
     def find_last_q_consistent_w_subtree(self, tree, subtree: Tree):

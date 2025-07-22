@@ -43,9 +43,9 @@ class Tree(nx.DiGraph):
             if isinstance(base, Tree):
                 self.rank = base.rank
             return
-        self.n = n
         if n is None:
             return
+        self.n = n
 
         rnd = random.Random(seed)
         if distribution is None:
@@ -66,6 +66,8 @@ class Tree(nx.DiGraph):
         self.add_edges_from(bfs_edges)
         self.seed = seed
 
+    def __copy__(self)->Tree:
+        return copy.deepcopy(self)
     def hash(self, labels):
         nodes = sorted(self.nodes)
         labels = sorted(labels)
@@ -263,4 +265,3 @@ class Tree(nx.DiGraph):
                 original_value = self.nodes[node][attribute]
                 new_value = round_function(original_value)
                 self.nodes[node][attribute] = new_value
-

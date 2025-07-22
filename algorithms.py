@@ -5,6 +5,7 @@ import numpy as np
 import networkx as nx
 from tree import Tree
 from decision_tree import DecisionTree
+from partial_dt import PartialDT
 from max_heap_object import MaxHeapObj
 import copy
 from itertools import combinations
@@ -213,13 +214,14 @@ def qptas_dereniowski_inspired(tree: Tree, epsilon=1) -> DecisionTree:
     while dt is not None:
         w += step
         dt = build_strategy(tree, c, w, n)
+    return dt
 
 
 def ceil_base(value, base):
     return base * ceil(value / base)
 
 
-def build_strategy(tree: Tree, c, w, n) -> DecisionTree:
+def build_strategy(tree: Tree, c, w, n) -> DecisionTree | None:
     contracted_tree = tree.contracted_heavy_groups(c * w)
     dt_lt = ranking_based_dt(contracted_tree)
 
@@ -227,11 +229,12 @@ def build_strategy(tree: Tree, c, w, n) -> DecisionTree:
         return ceil_base(value, w) if value > c * w else ceil_base(value, 1 / (c * n))
 
     tree.round_values(round_function)
-    dt = build_dt_lt_root(tree, dt_lt, c, w, n)
+    depth = c * c * ceil(log2(n))
+    dt = build_dt_lt_root(tree, dt_lt, c, w, n, depth)
     return dt
 
 
-def build_dt_lt_root(tree: Tree, dt_lt: DecisionTree, c, w, n) -> DecisionTree:
+def build_dt_lt_root(tree: Tree, dt_lt: DecisionTree, c, w, n, depth) -> DecisionTree | None:
     q = dt_lt.get_root()
     dt = DecisionTree(q)
     responses = dt_lt.query(tree)
@@ -240,22 +243,47 @@ def build_dt_lt_root(tree: Tree, dt_lt: DecisionTree, c, w, n) -> DecisionTree:
         dt_lt_cc = DecisionTree(dt_lt_cc)
         r_cc = cc.get_root()
         if cc.nodes(data=True)[r_cc][1]['w'] > c * w:
-            dt_cc = build_dt_h_root(cc, dt_lt_cc, c, w, n)
+            dt_cc = build_dt_h_root(cc, dt_lt_cc, c, w, n, depth)
         else:
-            dt_cc = build_dt_lt_root(cc, dt_lt_cc, c, w, n)
+            dt_cc = build_dt_lt_root(cc, dt_lt_cc, c, w, n, depth)
+        if dt_cc is None:
+            return None
         dt.attach_subtree(dt_cc, q)
+    if dt.cost() > w * depth:
+        return None
     return dt
 
 
-def build_dt_h_root(tree: Tree, dt_lt: DecisionTree, c, w, n) -> DecisionTree:
+def build_dt_h_root(tree: Tree, dt_lt: DecisionTree, c, w, n, depth) -> DecisionTree | None:
     child_dts = {}
-    for node in tree.nodes(data=True):
-        child_dts[node[0]] = None
-        if node[1]['w'] <= c*w:
-            pass
-    root = tree.get_root()
-    dt = dp_timelines(tree, root)
+    subtree = tree.copy()
+    for cc_dt_lt in nx.weakly_connected_components(dt_lt):
+        cc_dt_lt = DecisionTree(cc_dt_lt)
+        while len(dt_lt) > 0:
+            responses = cc_dt_lt.query(subtree, cc_dt_lt.nodes())
+            if len(responses) > 0:
+                cc_dd_lt_root = cc_dt_lt.get_root()
+                child_dts[cc_dd_lt_root] = []
+                for response_tree, response_dt_lt in responses.keys():
+                    response_tree = Tree(response_tree)
+                    response_dt_lt = DecisionTree(response_dt_lt)
+                    subtree.remove_nodes_from(response_tree.nodes())
+                    if response_tree.get_root()[1]['w'] > c * w:
+                        response_dt = build_dt_h_root(response_tree, response_dt_lt, c, w, n, depth)
+                    else:
+                        response_dt = build_dt_lt_root(response_tree, response_dt_lt, c, w, n, depth)
+                    if response_dt is None:
+                        return None
+                    child_dts[cc_dd_lt_root].append(response_dt)
+    root = subtree.get_root()
+    timeline = PartialDT(box_size=w, max_depth=depth)
+    partial_dt = dp_timelines(subtree, root, len(subtree.successors(root)), timeline, child_dts, c, w, n, depth)
+    if partial_dt is not None:
+        dt = partial_dt.to_decision_tree()
+        return dt
+    else:
+        return None
 
 
-def dp_timelines(tree, v, i, timeline, child_dts, c, w, n):
+def dp_timelines(tree, v, i, timeline, child_dts, c, w, n, depth) -> PartialDT | None:
     pass
