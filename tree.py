@@ -60,7 +60,10 @@ class Tree(nx.DiGraph):
         bfs_edges = list(nx.bfs_edges(undirected_tree, source=root))
         # Add nodes with attribute 'w'
         for node in undirected_tree.nodes:
-            self.add_node(node, w=distribution())
+            if node == 0:
+                self.add_node(node, w=1.0)
+            else:
+                self.add_node(node, w=distribution())
 
             # Dodaj ukierunkowane krawędzie
         self.add_edges_from(bfs_edges)
@@ -231,29 +234,59 @@ class Tree(nx.DiGraph):
     def neighboring_edges(self, v):
         return list(self.in_edges(v)) + list(self.out_edges(v))
 
-    def contracted_heavy_groups(self, w) -> Tree:
-        pass
+    def contracted_heavy_groups(self, w, v: int = None, new_tree: Tree = None) -> Tree:
+        nodes = self.nodes(data=True)
+        if v is None:
+            v = self.get_root()
+            if nodes[v]['w'] >= w:
+                return None
+        if new_tree is None:
+            new_tree = Tree(nodes[v])
+        for u in self.successors(v):
+            w_v = nodes[v]['w']
+            if w_v <= w:
+                new_tree.add_node(nodes[u])
+                new_tree.add_edge(v,u)
+                self.contracted_heavy_groups(w=w, v=u, new_tree=new_tree)
+            else:
+                queue = [u]
+                while queue:
+                    u = queue.pop(0)
+                    for c in self.successors(u):
+                        if nodes[c]['w'] <= w:
+                            new_tree.add_node(nodes[c])
+                            new_tree.add_edge(v, c)
+                            self.contracted_heavy_groups(w=w, v=c, new_tree=new_tree)
+                        else:
+                            queue.append(c)
+
+
+        return new_tree
 
     def reroot_by_min_attr(self, attr='w'):
-        # 1. Znajdź nowy root
+        # 1. Znajdź nowy root na podstawie minimalnej wartości danego atrybutu
         new_root = min(self.nodes, key=lambda u: self.nodes[u].get(attr, float('inf')))
 
-        # 2. Zbuduj nowe drzewo jako BFS z nowego roota
+        # 2. Zainicjalizuj nowe drzewo i ustaw root
         new_tree = Tree()
         new_tree.root = new_root
 
+        # 3. Przenieś atrybuty wierzchołków do nowego drzewa
+        for node in self.nodes:
+            new_tree.add_node(node, **self.nodes[node])  # zakładamy, że self.nodes[node] to dict atrybutów
+
+        # 4. BFS od nowego roota, budujemy drzewo "w dół"
         visited = set()
         queue = [new_root]
         visited.add(new_root)
 
         while queue:
             u = queue.pop(0)
-            for v in self.successors(u):
+
+            # rozważamy tylko krawędzie prowadzące do wierzchołków, które nie były jeszcze odwiedzone
+            for v in list(self.predecessors(u)) + list(self.successors(u)):
                 if v not in visited:
-                    continue  # ignorujemy krawędzie wychodzące, bo chcemy tylko dzieci w BFS z nowego roota
-            for v in self.predecessors(u):
-                if v not in visited:
-                    new_tree.add_edge(u, v)  # od nowego roota w dół
+                    new_tree.add_edge(u, v)
                     visited.add(v)
                     queue.append(v)
 
@@ -265,3 +298,8 @@ class Tree(nx.DiGraph):
                 original_value = self.nodes[node][attribute]
                 new_value = round_function(original_value)
                 self.nodes[node][attribute] = new_value
+    def get_subtree(self, v):
+        return copy.deepcopy(nx.dfs_tree(self, source=v))
+
+    def get_neighbors(self, v):
+        return list(self.predecessors(v))+list(self.successors(v))

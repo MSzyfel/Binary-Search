@@ -1,5 +1,5 @@
 import heapq
-from math import log2, ceil
+from math import log2, ceil, floor
 
 import numpy as np
 import networkx as nx
@@ -9,6 +9,7 @@ from partial_dt import PartialDT
 from max_heap_object import MaxHeapObj
 import copy
 from itertools import combinations
+from functools import lru_cache
 
 INF = float('inf')
 
@@ -40,7 +41,7 @@ def dp_tree(tree: Tree, nodes: list = None, dp=None):
     return dc
 
 
-def tree_search_cicalese_inspired(tree: Tree, t: int):
+def tree_search_cicalese_inspired(tree: Tree, t: int, base_algorithm):
     if len(tree) <= t:
         return dp_tree(tree)
     else:
@@ -59,13 +60,13 @@ def tree_search_cicalese_inspired(tree: Tree, t: int):
         tree_on_x = tree.minimal_subtree(centroids)
         x = centroids | tree_on_x.vertices_of_degree_at_least(3)
         y = tree.minimal_subtree_with_contracted_paths(x)
-        dt_y = dp_tree(y, y.nodes())
+        dt_y = base_algorithm(y)
         y_nodes = set(dt_y.nodes())
         for p in tree_on_x.ccs(y_nodes):
             dt_p = dp_tree(p)
             dt_y.attach_sub_dt(tree, p, dt_p)
         for h in tree.ccs(set(tree_on_x.nodes())):
-            dt_h = tree_search_cicalese_inspired(h, t)
+            dt_h = tree_search_cicalese_inspired(h, t, base_algorithm)
             dt_y.attach_sub_dt(tree, h, dt_h)
         return dt_y
 
@@ -205,32 +206,56 @@ def ranking_based_dt(tree: Tree):
 
 
 def qptas_dereniowski_inspired(tree: Tree, epsilon=1) -> DecisionTree:
+    # tree.draw(attribute='w', type=float)
     tree = tree.reroot_by_min_attr('w')
+    tree.draw(attribute='w', type=float)
+    nodes = tree.nodes(data=True)
+    max_val = max([nodes[i]['w'] for i in range(len(tree))])
+
+    def round_function(value):
+        return value / max_val
+
+    tree.round_values(round_function)
+    excluded_queries = set()
+    for v in nodes:
+        sum_of_neighbor_weights = sum(nodes[i]['w'] for i in tree.get_neighbors(v))
+        if nodes[v]['w'] > sum_of_neighbor_weights:
+            excluded_queries.add(v)
+            tree.nodes[v]['w'] = sum_of_neighbor_weights
     c = ceil(168 / epsilon)
     n = len(tree)
     step = 1 / (c * n)
-    w = step
+    w = max(step, 1 / (c * c * floor(log2(n))))
     dt = build_strategy(copy.deepcopy(tree), c, w, n)
     while dt is not None:
         w += step
-        dt = build_strategy(tree, c, w, n)
+        dt = build_strategy(copy.deepcopy(tree), c, w, n)
+    dt = dt.replace_excluded_queries(tree, excluded_queries=excluded_queries)
     return dt
 
 
 def ceil_base(value, base):
-    return base * ceil(value / base)
+    val = base * ceil(value / base)
+    return val
 
 
 def build_strategy(tree: Tree, c, w, n) -> DecisionTree | None:
     contracted_tree = tree.contracted_heavy_groups(c * w)
-    dt_lt = ranking_based_dt(contracted_tree)
+    if contracted_tree is not None:
+        dt_lt = ranking_based_dt(contracted_tree)
+    else:
+        dt_lt = DecisionTree()
 
     def round_function(value):
         return ceil_base(value, w) if value > c * w else ceil_base(value, 1 / (c * n))
 
     tree.round_values(round_function)
+    tree.draw()
     depth = c * c * ceil(log2(n))
-    dt = build_dt_lt_root(tree, dt_lt, c, w, n, depth)
+    if tree.nodes(data=True)[tree.get_root()]['w'] <= c * w:
+        dt = build_dt_lt_root(tree, dt_lt, c, w, n, depth)
+    else:
+        dt = build_dt_h_root(tree, dt_lt, c, w, n, depth)
     return dt
 
 
@@ -285,5 +310,60 @@ def build_dt_h_root(tree: Tree, dt_lt: DecisionTree, c, w, n, depth) -> Decision
         return None
 
 
-def dp_timelines(tree, v, i, timeline, child_dts, c, w, n, depth) -> PartialDT | None:
-    pass
+@lru_cache(maxsize=None)
+def dp_timelines(tree: Tree, v: int, i: int, timeline: PartialDT, child_dts: dict, c: int, w: float, n: int,
+                 depth: int) -> PartialDT | None:
+    if i == 0:
+        for box_index in range(depth):
+            try:
+                dt = timeline.copy()
+                dt.put_query(box_index, v, tree.weight(v), sub_dts=child_dts[v])
+                if dt.cost() <= depth * w:
+                    return dt
+                else:
+                    return None
+            except:
+                continue
+    candidate_dts = []
+    if i == 1:
+        for box_index in range(depth):
+            try:
+                dtb = timeline.copy()
+                dtb.put_query(box_index, v, tree.weight(v), sub_dts=child_dts[v])
+                if dtb.cost() <= depth * w:
+                    loads = dtb.get_loads()
+                    for box_below in range(box_index + 1, depth):
+                        loads[box_below] = 0.0
+                    new_timeline = PartialDT(loads)
+                    u = tree.successors(v)[0]
+                    dtb2 = dp_timelines(tree=tree, v=u, i=len(tree.successors(u)) - 1, timeline=new_timeline,
+                                        child_dts=child_dts, c=c, w=w, n=n, depth=depth)
+                    dtb.merge(dtb2, box=box_index)
+                    if dtb.cost() <= depth * w:
+                        candidate_dts.append(dtb)
+            except:
+                continue
+    else:
+        for loads1, loads2 in timeline.all_bipartitions():
+            timeline = PartialDT(base=loads1, box_size=w, max_depth=depth, slot_size=1 / (c + n))
+            dt1 = dp_timelines(tree=tree, v=v, i=i - 1, timeline=timeline,
+                               child_dts=child_dts, c=c, w=w, n=n, depth=depth)
+            v_found = False
+            v_box_index = None
+            for i in range(depth):
+                if not v_found:
+                    if v in dt1.query_sequence(i):
+                        v_found = True
+                        v_box_index = i
+                else:
+                    loads2 = 0.0
+            timeline = PartialDT(base=loads2, box_size=w, max_depth=depth, slot_size=1 / (c + n))
+            u = tree.successors(v)[i]
+            dt2 = dp_timelines(tree=tree, v=u, i=len(tree.successors(u)), timeline=timeline,
+                               child_dts=child_dts, c=c, w=w, n=n, depth=depth)
+            dt1.merge(dt2, v_box_index, v)
+            if dt1.cost() <= depth * w:
+                candidate_dts.append(dt1)
+    if len(candidate_dts):
+        return None
+    return min(candidate_dts, key=lambda dt: dt.cost())
