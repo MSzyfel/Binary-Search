@@ -39,7 +39,8 @@ class Tree(nx.DiGraph):
             self.add_nodes_from(nodes)
             self.add_edges_from(base.edges(data=True))
             self.n = len(base)
-            self.root = self.get_root()
+            if self.n > 0:
+                self.root = self.get_root()
             if isinstance(base, Tree):
                 self.rank = base.rank
             return
@@ -60,17 +61,15 @@ class Tree(nx.DiGraph):
         bfs_edges = list(nx.bfs_edges(undirected_tree, source=root))
         # Add nodes with attribute 'w'
         for node in undirected_tree.nodes:
-            if node == 0:
-                self.add_node(node, w=1.0)
-            else:
-                self.add_node(node, w=distribution())
+            self.add_node(node, w=distribution())
 
             # Dodaj ukierunkowane krawędzie
         self.add_edges_from(bfs_edges)
         self.seed = seed
 
-    def __copy__(self)->Tree:
+    def __copy__(self) -> Tree:
         return copy.deepcopy(self)
+
     def hash(self, labels):
         nodes = sorted(self.nodes)
         labels = sorted(labels)
@@ -115,6 +114,8 @@ class Tree(nx.DiGraph):
         return subtrees
 
     def attach_subtree(self, other: Tree, v):
+        if len(other)==0:
+            return
         root_other = other.get_root()
         if isinstance(v, tuple):
             v = v[0]
@@ -167,8 +168,10 @@ class Tree(nx.DiGraph):
                     edges.add((v, u))
                 else:
                     edges.add((u, v))
-
-        return copy.deepcopy(self.edge_subgraph(edges))
+        subgraph = self.subgraph(nodes)
+        minimal_subtree = copy.deepcopy(Tree(subgraph))
+        #
+        return minimal_subtree
 
     def __lt__(self, other):
         return len(self) < len(other)
@@ -234,19 +237,21 @@ class Tree(nx.DiGraph):
     def neighboring_edges(self, v):
         return list(self.in_edges(v)) + list(self.out_edges(v))
 
-    def contracted_heavy_groups(self, w, v: int = None, new_tree: Tree = None) -> Tree:
+    def contracted_heavy_groups(self, w, v: int = None, new_tree: Tree = None) -> Tree | None:
         nodes = self.nodes(data=True)
         if v is None:
             v = self.get_root()
-            if nodes[v]['w'] >= w:
+            if nodes[v]['w'] > w:
                 return None
         if new_tree is None:
-            new_tree = Tree(nodes[v])
+            new_tree = Tree()
+            new_tree.add_node(v, **nodes[v])
         for u in self.successors(v):
-            w_v = nodes[v]['w']
-            if w_v <= w:
-                new_tree.add_node(nodes[u])
-                new_tree.add_edge(v,u)
+            w_u = nodes[u]['w']
+            if w_u <= w:
+                data = nodes[u]
+                new_tree.add_node(u, **data)
+                new_tree.add_edge(v, u)
                 self.contracted_heavy_groups(w=w, v=u, new_tree=new_tree)
             else:
                 queue = [u]
@@ -254,12 +259,12 @@ class Tree(nx.DiGraph):
                     u = queue.pop(0)
                     for c in self.successors(u):
                         if nodes[c]['w'] <= w:
-                            new_tree.add_node(nodes[c])
+                            data = nodes[c]
+                            new_tree.add_node(c, **data)
                             new_tree.add_edge(v, c)
                             self.contracted_heavy_groups(w=w, v=c, new_tree=new_tree)
                         else:
                             queue.append(c)
-
 
         return new_tree
 
@@ -298,8 +303,22 @@ class Tree(nx.DiGraph):
                 original_value = self.nodes[node][attribute]
                 new_value = round_function(original_value)
                 self.nodes[node][attribute] = new_value
+
     def get_subtree(self, v):
         return copy.deepcopy(nx.dfs_tree(self, source=v))
 
     def get_neighbors(self, v):
-        return list(self.predecessors(v))+list(self.successors(v))
+        pred = list(self.predecessors(v))
+        succ = list(self.successors(v))
+        return pred + succ
+
+    def fulfil_star_condition(self):
+        excluded_queries = []
+        for v in self.nodes():
+            neighbors = self.get_neighbors(v)
+            sum_of_neighbor_weights = sum(self.nodes[neighbor]['w'] for neighbor in neighbors)
+            if self.nodes[v]['w'] > sum_of_neighbor_weights:
+                excluded_queries.append(v)
+                self.nodes[v]['w'] = sum_of_neighbor_weights
+        return excluded_queries
+

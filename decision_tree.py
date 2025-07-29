@@ -26,15 +26,18 @@ class DecisionTree(Tree):
         for t in t_ccs:
             if excluded_responses is None or all(v not in excluded_responses for v in t.nodes()):
                 nodes_to_delete = tree.nodes() - t.nodes()
-                dt = copy.deepcopy(self)
+                dt = copy.deepcopy(DecisionTree(self))
                 dt.remove_nodes_from(nodes_to_delete)
                 responses[t] = DecisionTree(dt)
         return responses
 
     def find_last_q_consistent_w_subtree(self, tree, subtree: Tree):
         for t, dt in self.query(tree).items():
-            if t is not None and subtree.is_subtree(t):
-                return dt.find_last_q_consistent_w_subtree(t, subtree)
+            if t is not None:
+                if subtree.nodes == t.nodes:
+                    return self.get_root()
+                if subtree.is_subtree(t):
+                    return dt.find_last_q_consistent_w_subtree(t, subtree)
         return self.get_root()
 
     def attach_sub_dt(self, tree, h, dt_h):
