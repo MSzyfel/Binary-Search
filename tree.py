@@ -157,7 +157,9 @@ class Tree(nx.DiGraph):
         edges = set()
 
         if len(terminals) < 2:
-            return Tree(nx.DiGraph(terminals))
+            subtree = Tree()
+            subtree.add_nodes_from(terminals)
+            return subtree
         for u, v in self.pairs_of_ordered_vertices(terminals):
             path = nx.shortest_path(nx.Graph(self), source=u, target=v)
             nodes.update(path)

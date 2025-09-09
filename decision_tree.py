@@ -34,13 +34,21 @@ class DecisionTree(Tree):
     def find_last_q_consistent_w_subtree(self, tree, subtree: Tree):
         for t, dt in self.query(tree).items():
             if t is not None:
-                if subtree.nodes == t.nodes:
-                    return self.get_root()
+                # if list(subtree.nodes()) == list(t.nodes()):
+                #     return self.get_root()
                 if subtree.is_subtree(t):
-                    return dt.find_last_q_consistent_w_subtree(t, subtree)
+                    if len(dt) == 0:
+                        return self.get_root()
+                    else:
+                        return dt.find_last_q_consistent_w_subtree(t, subtree)
         return self.get_root()
 
     def attach_sub_dt(self, tree, h, dt_h):
+        if len(self) == 0:
+            # Clear current attributes and copy everything from dt_h
+            self.__dict__.clear()
+            self.__dict__.update(dt_h.__dict__)
+            return self
         q = self.find_last_q_consistent_w_subtree(tree, h)
         self.attach_subtree(dt_h, q)
 
@@ -71,3 +79,7 @@ class DecisionTree(Tree):
                 new_dt_cc = dt_cc.replace_excluded_queries(tree=cc, excluded_queries=excluded_queries)
                 new_dt.attach_subtree(new_dt_cc, root)
         return new_dt
+
+    def append_costs(self, tree):
+        for v in self.nodes():
+            self.nodes[v]['c'] = tree.nodes[v]['c']

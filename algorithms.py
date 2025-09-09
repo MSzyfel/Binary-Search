@@ -1,5 +1,5 @@
 import heapq
-from math import log2, ceil, floor
+from math import log2, ceil, floor, sqrt
 
 import numpy as np
 import networkx as nx
@@ -209,6 +209,8 @@ def ranking_based_dt(tree: Tree):
 
 
 def qptas_dereniowski_inspired(tree: Tree, epsilon=6) -> DecisionTree:
+    if len(tree) == 0:
+        return DecisionTree()
     tree_unchanged = copy.deepcopy(tree)
     tree = tree.reroot_by_min_attr('c')
     nodes = tree.nodes(data=True)
@@ -425,27 +427,40 @@ def k_up_modularity_algorithm(tree: Tree):
     n = len(tree)
 
     def create_dt(current_tree: Tree, a: float, b: float):
-        if b <= log2(n) or all(tree.vcost(v) > a for v in tree.nodes()):
+        if b <= 1 / log2(n) or all(tree.vcost(v) > a for v in tree.nodes()):
             dt = ranking_based_dt(current_tree)
+            return dt
+        elif len(current_tree) <= int(2 ** (sqrt(log2(n)))):
+            dt = qptas_dereniowski_inspired(current_tree)
             return dt
         else:
             x = set()
             for h in current_tree.get_heavy_groups(a):
-                v = h.nodes[0]
+                heavy_group = list(h.nodes())
+                v = heavy_group[0]
                 x.add(v)
             tree_on_x = tree.minimal_subtree(x)
-            z = x | tree_on_x.vertices_of_degree_at_least(3)
-            t_z = tree.minimal_subtree_with_contracted_paths(x)
+            y = x | tree_on_x.vertices_of_degree_at_least(3)
+            t_z = tree.minimal_subtree_with_contracted_paths(y)
+            z = set(t_z.nodes())
             d = qptas_dereniowski_inspired(t_z)
             for ccs in current_tree.ccs(z):
-                h = current_tree.get_heavy_groups(a)[0]
-                d_h = ranking_based_dt(h)
-                d.attach_sub_dt(current_tree, ccs, d_h)
-                for l_ccs in ccs.ccs(h):
-                    d_l = create_dt(l_ccs, a / 2, a)
-                    d.attach_sub_dt(current_tree, l_ccs, d_l)
+                hs = ccs.get_heavy_groups(a)
+                if len(hs) == 1:
+                    h = hs[0]
+                    d_h = ranking_based_dt(h)
+                    d.attach_sub_dt(current_tree, ccs, d_h)
+                    for l_ccs in ccs.ccs(set(h.nodes())):
+                        d_l = create_dt(l_ccs, a / 2, a)
+                        d.attach_sub_dt(current_tree, l_ccs, d_l)
+                else:
+                    d_l = create_dt(ccs, a / 2, a)
+                    d.attach_sub_dt(current_tree, ccs, d_l)
             return d
 
-    a = (2 ^ (ceil(log2(log2(n))) - 1)) / log2(n)
+    num = 2 ** (ceil(log2(log2(n))) - 1)
+    denom = log2(n)
+    a = num / denom
     d = create_dt(tree, a, 1.0)
+    d.append_costs(tree)
     return d

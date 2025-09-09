@@ -127,8 +127,7 @@ class PartialDT(DecisionTree):
                     options_for_box.append((j * self.slot_size, True))
                     options_for_box.append((j * self.slot_size, False))
             options.append(options_for_box)
-        combinations = list(product(*options))
-        for combination in combinations:
+        for combination in product(*options):
             combination2 = [
                 (self.box_size - self.nodes[i]['load'] - combination[i][0], not combination[i][1] or nodes[i]['trans'])
                 for i in range(self.max_depth)]
