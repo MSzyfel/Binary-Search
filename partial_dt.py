@@ -60,9 +60,9 @@ class PartialDT(DecisionTree):
         else:
             root_query_with_right_dts = queries_with_right_right_dts[0]
         root_query = root_query_with_right_dts[0]
-        weight = root_query_with_right_dts[1]['w']
+        cost = root_query_with_right_dts[1]['c']
         right_dts = root_query_with_right_dts[1]["right_dts"]
-        root_dt = {root_query: {'w': weight}}
+        root_dt = {root_query: {'c': cost}}
         dt = DecisionTree(root_dt)
         self.remove_query(root_query)
         if len(self) > 0:
@@ -88,26 +88,26 @@ class PartialDT(DecisionTree):
             return self.box_size
         return self.box_size + max(sub_dt.cost() for sub_dt in sub_dts)
 
-    def put_query(self, box_index, slot_index, query, weight, is_heavy: bool, is_first=False, right_dts=None):
+    def put_query(self, box_index, slot_index, query, cost, is_heavy: bool, is_first=False, right_dts=None):
         if right_dts is None:
             right_dts = []
         box = self.nodes(data=True)[box_index]
         new_qs = box['qs']
         load = box['load']
-        contribution = min(weight, self.box_size - slot_index * self.slot_size)
-        new_weight = weight - contribution
+        contribution = min(cost, self.box_size - slot_index * self.slot_size)
+        new_cost = cost - contribution
         if (is_heavy and box['load'] > 0) or box['load'] == self.box_size or box['load'] + contribution > self.box_size:
             raise Exception
         else:
-            if new_weight == 0:
-                new_qs[query] = {'w': weight, 'right_dts': right_dts}
+            if new_cost == 0:
+                new_qs[query] = {'c': cost, 'right_dts': right_dts}
                 box = {'load': load + contribution, 'qs': new_qs, 'trans': False,
                        'first': query if is_first else None}
             else:
                 if box['trans'] is True:
                     raise Exception
-                new_qs[query] = {'w': weight, 'right_dts': []}
-                self.put_query(box_index + 1, 0, query, new_weight, is_heavy, True, right_dts)
+                new_qs[query] = {'c': cost, 'right_dts': []}
+                self.put_query(box_index + 1, 0, query, new_cost, is_heavy, True, right_dts)
                 box = {'load': box['load'] + contribution, 'qs': new_qs, 'trans': True,
                        'first': query if is_first else None}
             self.nodes[box_index].update(box)

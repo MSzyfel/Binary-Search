@@ -15,12 +15,12 @@ class Tree(nx.DiGraph):
     def __init__(self, base: any = None, n: int = None, seed: int = None, distribution=None):
         """
         Initializes a random directed rooted tree with 'n' nodes and a random root.
-        Each node is assigned a random attribute 'w'.
+        Each node is assigned a random attribute 'c'.
 
         Parameters:
             n (int): number of nodes (must be ≥ 1)
             seed (int, optional): random seed
-            distribution (callable, optional): function returning a float for node attribute 'w'
+            distribution (callable, optional): function returning a float for node attribute 'c'
                                                (default: uniform(0,1))
         """
         super().__init__()
@@ -59,9 +59,9 @@ class Tree(nx.DiGraph):
         root = rnd.choice(list(undirected_tree.nodes))
         self.root = root
         bfs_edges = list(nx.bfs_edges(undirected_tree, source=root))
-        # Add nodes with attribute 'w'
+        # Add nodes with attribute 'c'
         for node in undirected_tree.nodes:
-            self.add_node(node, w=distribution())
+            self.add_node(node, c=distribution())
 
             # Dodaj ukierunkowane krawędzie
         self.add_edges_from(bfs_edges)
@@ -83,11 +83,11 @@ class Tree(nx.DiGraph):
                 break
         return g_hash
 
-    def weight(self, v):
+    def vcost(self, v):
         if isinstance(v, tuple):
             v = v[0]
-        if 'w' in self.nodes[v]:
-            return self.nodes[v]['w']
+        if 'c' in self.nodes[v]:
+            return self.nodes[v]['c']
         else:
             return 1
 
@@ -197,7 +197,7 @@ class Tree(nx.DiGraph):
                 if len(set_of_vertices_of_path_u_v) == 2:
                     self.add_rooted_edge(edges, u, v)
                 else:
-                    l = min(list(set_of_vertices_of_path_u_v - {u, v}), key=lambda v: self.weight(v))
+                    l = min(list(set_of_vertices_of_path_u_v - {u, v}), key=lambda v: self.vcost(v))
                     nodes.add(l)
                     self.add_rooted_edge(edges, u, l)
                     self.add_rooted_edge(edges, l, v)
@@ -237,38 +237,38 @@ class Tree(nx.DiGraph):
     def neighboring_edges(self, v):
         return list(self.in_edges(v)) + list(self.out_edges(v))
 
-    def contracted_heavy_groups(self, w, v: int = None, new_tree: Tree = None) -> Tree | None:
+    def contracted_heavy_groups(self, c, v: int = None, new_tree: Tree = None) -> Tree | None:
         nodes = self.nodes(data=True)
         if v is None:
             v = self.get_root()
-            if nodes[v]['w'] > w:
+            if nodes[v]['c'] > c:
                 return None
         if new_tree is None:
             new_tree = Tree()
             new_tree.add_node(v, **nodes[v])
         for u in self.successors(v):
-            w_u = nodes[u]['w']
-            if w_u <= w:
+            w_u = nodes[u]['c']
+            if w_u <= c:
                 data = nodes[u]
                 new_tree.add_node(u, **data)
                 new_tree.add_edge(v, u)
-                self.contracted_heavy_groups(w=w, v=u, new_tree=new_tree)
+                self.contracted_heavy_groups(c=c, v=u, new_tree=new_tree)
             else:
                 queue = [u]
                 while queue:
                     u = queue.pop(0)
                     for c in self.successors(u):
-                        if nodes[c]['w'] <= w:
+                        if nodes[c]['c'] <= c:
                             data = nodes[c]
                             new_tree.add_node(c, **data)
                             new_tree.add_edge(v, c)
-                            self.contracted_heavy_groups(w=w, v=c, new_tree=new_tree)
+                            self.contracted_heavy_groups(c=c, v=c, new_tree=new_tree)
                         else:
                             queue.append(c)
 
         return new_tree
 
-    def reroot_by_min_attr(self, attr='w'):
+    def reroot_by_min_attr(self, attr='c'):
         # 1. Znajdź nowy root na podstawie minimalnej wartości danego atrybutu
         new_root = min(self.nodes, key=lambda u: self.nodes[u].get(attr, float('inf')))
 
@@ -297,7 +297,7 @@ class Tree(nx.DiGraph):
 
         return new_tree
 
-    def round_values(self, round_function, attribute='w'):
+    def round_values(self, round_function, attribute='c'):
         for node in self.nodes:
             if attribute in self.nodes[node]:
                 original_value = self.nodes[node][attribute]
@@ -316,9 +316,25 @@ class Tree(nx.DiGraph):
         excluded_queries = []
         for v in self.nodes():
             neighbors = self.get_neighbors(v)
-            sum_of_neighbor_weights = sum(self.nodes[neighbor]['w'] for neighbor in neighbors)
-            if self.nodes[v]['w'] > sum_of_neighbor_weights:
+            sum_of_neighbor_costs = sum(self.nodes[neighbor]['c'] for neighbor in neighbors)
+            if self.nodes[v]['c'] > sum_of_neighbor_costs:
                 excluded_queries.append(v)
-                self.nodes[v]['w'] = sum_of_neighbor_weights
+                self.nodes[v]['c'] = sum_of_neighbor_costs
         return excluded_queries
 
+    def get_heavy_groups(self, a):
+        heavy_nodes = [v for v, data in self.nodes(data=True) if data.get('c', float('-inf')) > a]
+
+        if not heavy_nodes:
+            return []
+
+        undir = nx.Graph(self)
+        induced = undir.subgraph(heavy_nodes)
+
+        groups: list[Tree] = []
+        for comp in nx.connected_components(induced):
+            subgraph = self.subgraph(comp)
+            group_tree = Tree(copy.deepcopy(subgraph))
+            groups.append(group_tree)
+
+        return groups
