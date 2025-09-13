@@ -425,12 +425,15 @@ def dp_timelines(tree: Tree, child_dts: dict, p: int, c: float, n: int,
 
 def k_up_modularity_algorithm(tree: Tree):
     n = len(tree)
-
+    if n < 4:
+        t=1
+    else:
+        t = int(2 ** (sqrt(log2(n))))
     def create_dt(current_tree: Tree, a: float, b: float):
         if b <= 1 / log2(n) or all(tree.vcost(v) > a for v in tree.nodes()):
             dt = ranking_based_dt(current_tree)
             return dt
-        elif len(current_tree) <= int(2 ** (sqrt(log2(n)))):
+        elif len(current_tree) <= t:
             dt = qptas_dereniowski_inspired(current_tree)
             return dt
         else:
@@ -458,9 +461,18 @@ def k_up_modularity_algorithm(tree: Tree):
                     d.attach_sub_dt(current_tree, ccs, d_l)
             return d
 
-    num = 2 ** (ceil(log2(log2(n))) - 1)
-    denom = log2(n)
-    a = num / denom
+    if n == 1:
+        dt = DecisionTree()
+        node_id, attrs = list(tree.nodes(data=True))[0]
+        dt.add_node(node_id, **attrs)
+        return dt
+    if n < 4:
+        a = 0
+    else:
+        num = 2 ** (ceil(log2(log2(n))) - 1)
+        denom = log2(n)
+        a = num / denom
+
     d = create_dt(tree, a, 1.0)
     d.append_costs(tree)
     return d

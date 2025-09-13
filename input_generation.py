@@ -1,6 +1,7 @@
 import networkx as nx
 import random
 
+from tree import Tree
 
 def generate_random_tree(n, seed=None, distribution=None):
     """

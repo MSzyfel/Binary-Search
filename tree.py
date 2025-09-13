@@ -114,7 +114,7 @@ class Tree(nx.DiGraph):
         return subtrees
 
     def attach_subtree(self, other: Tree, v):
-        if len(other)==0:
+        if len(other) == 0:
             return
         root_other = other.get_root()
         if isinstance(v, tuple):
@@ -340,3 +340,32 @@ class Tree(nx.DiGraph):
             groups.append(group_tree)
 
         return groups
+
+    @classmethod
+    def make_k_up_modular(cls, n: int, k: int,
+                          seed: int | None = None) -> Tree:
+        tree = Tree(n=n, seed=seed)
+        nodes = list(tree.nodes(data=True))
+        nodes.sort(key=lambda v: -v[1]['c'])
+        for node, _ in nodes:
+            s = tree.nodes[node]['c']
+            hs = tree.get_heavy_groups(s)
+            while len(hs) > k:
+                h1 = hs[0]
+                h2 = hs[1]
+                hv1 = list(h1.nodes())[0]
+                hv2 = list(h2.nodes())[0]
+                path = tree.minimal_subtree({hv1, hv2})
+                for v in path:
+                    tree.nodes[v]['c'] = s
+                hs = tree.get_heavy_groups(s)
+        return tree
+
+    def is_k_up_modular(self, k):
+        for node in self.nodes():
+            s = self.nodes[node]['c']
+            hs = self.get_heavy_groups(s)
+            ks = len(hs)
+            if ks > k:
+                return False
+        return True
