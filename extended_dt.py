@@ -7,10 +7,10 @@ import copy
 from itertools import product
 
 
-class PartialDT(DecisionTree):
-    def __init__(self, base: any = None, box_size=1, max_depth=1, slot_size=0.1):
+class ExtendedDT(DecisionTree):
+    def __init__(self, base: any = None, box_size=1, max_depth=1, slot_size=1):
         super().__init__()
-        if isinstance(base, PartialDT):
+        if isinstance(base, ExtendedDT):
             self.box_size = base.box_size
             self.max_depth = base.max_depth
             self.slot_size = base.slot_size
@@ -68,12 +68,12 @@ class PartialDT(DecisionTree):
         if len(self) > 0:
             right_dts.append(self)
         for sub_dt in right_dts:
-            sub_dt = PartialDT(sub_dt)
+            sub_dt = ExtendedDT(sub_dt)
             sub_dt_dt = sub_dt.to_decision_tree()
             dt.attach_subtree(sub_dt_dt, root_dt)
         return dt
 
-    def cost(self):
+    def cost(self, crit='worst'):
         box = self.get_root()
         queries_with_right_right_dts = list(self.nodes(data=True)[box]['qs'].items())
         sub_dts = []
@@ -81,12 +81,15 @@ class PartialDT(DecisionTree):
             sub_dts.extend(root_query_with_right_dts[1]["right_dts"])
         self_copy = copy.deepcopy(self)
         self_copy.remove_node(box)
-        if box < self.max_depth - 1:
-            sub_dts.append(self_copy)
+        if crit == 'worst':
+            cost_left = self_copy.cost() if box < self.max_depth - 1 else 0
+            return max(cost_left+self.box_size, (max(sub_dt.cost(crit) for sub_dt in sub_dts) if len(sub_dts) == 0 else 0))
         # TODO: check if this cost function is correct
-        if len(sub_dts) == 0:
-            return self.box_size
-        return self.box_size + max(sub_dt.cost() for sub_dt in sub_dts)
+        else:
+            if box < self.max_depth - 1:
+                sub_dts.append(self_copy)
+            return self.box_size * self.sum_of('w') + (
+                sum(sub_dt.cost(crit) for sub_dt in sub_dts) if len(sub_dts) == 0 else 0)
 
     def put_query(self, box_index, slot_index, query, cost, is_heavy: bool, is_first=False, right_dts=None):
         if right_dts is None:
@@ -112,31 +115,43 @@ class PartialDT(DecisionTree):
                        'first': query if is_first else None}
             self.nodes[box_index].update(box)
 
-    def all_bipartitions(self) -> tuple[list[float], list[float]]:
+    def all_bipartitions(self, trans=True) -> tuple[list[float], list[float]]:
         options = []
         nodes = self.nodes(data=True)
         for i in range(self.max_depth):
             options_for_box = []
             node = nodes[i]
             load = node['load']
-            empty_slots = int(round((self.box_size - load) / self.slot_size, 0))
-            for j in range(0, empty_slots + 1):
-                if node['trans']:
-                    options_for_box.append((j * self.slot_size, True))
-                else:
-                    options_for_box.append((j * self.slot_size, True))
-                    options_for_box.append((j * self.slot_size, False))
+            if trans:
+                empty_slots = int(round((self.box_size - load) / self.slot_size, 0))
+                for j in range(0, empty_slots + 1):
+                    if node['trans']:
+                        options_for_box.append((j * self.slot_size, True))
+                    else:
+                        options_for_box.append((j * self.slot_size, True))
+                        options_for_box.append((j * self.slot_size, False))
+            else:
+                options_for_box.append(True)
+                if not load:
+                    options_for_box.append(False)
+
             options.append(options_for_box)
         for combination in product(*options):
-            combination2 = [
-                (self.box_size - self.nodes[i]['load'] - combination[i][0], not combination[i][1] or nodes[i]['trans'])
-                for i in range(self.max_depth)]
+            if trans:
+                combination2 = [
+                    (self.box_size - self.nodes[i]['load'] - combination[i][0],
+                     not combination[i][1] or nodes[i]['trans'])
+                    for i in range(self.max_depth)]
+            else:
+                combination2 = [
+                    not combination[i][0] or self.nodes[i]['load']
+                    for i in range(self.max_depth)]
             yield combination, combination2
 
-    def get_loads(self) -> list[tuple[float, bool]]:
-        return [(node[1]['load'], node[1]['trans']) for node in self.nodes(data=True)]
+    def get_loads(self, trans=True) -> list[tuple[float, bool]] | list[bool]:
+        return [(node[1]['load'], node[1]['trans'] if trans else node[1]['load']) for node in self.nodes(data=True)]
 
-    def merge(self, other: PartialDT, box: int, query):
+    def merge(self, other: ExtendedDT, box: int, query):
         for i in range(box + 1):
             self.nodes[i]['load'] = self.nodes[i]['load'] + other.nodes[i]['load']
             self.nodes[i]['qs'] = self.nodes[i]['qs'] | other.nodes[i]['qs']
@@ -148,3 +163,18 @@ class PartialDT(DecisionTree):
 
     def query_sequence(self, box):
         return [node for node in self.nodes[box]['qs']]
+
+    def sum_of(self, f):
+        box = self.get_root()
+        queries_with_right_right_dts = list(self.nodes(data=True)[box]['qs'].items())
+        sub_dts = []
+        sum_of_f = 0
+        for root_query_with_right_dts in queries_with_right_right_dts:
+            sub_dts.extend(root_query_with_right_dts[1]["right_dts"])
+            sum_of_f += root_query_with_right_dts[1][f]
+        self_copy = copy.deepcopy(self)
+        self_copy.remove_node(box)
+        if box < self.max_depth - 1:
+            sub_dts.append(self_copy)
+        return sum_of_f + (
+            sum(sub_dt.sum_of(f) for sub_dt in sub_dts) if len(sub_dts) == 0 else 0)

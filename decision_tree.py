@@ -7,12 +7,19 @@ from tree import Tree
 
 class DecisionTree(Tree):
 
-    def cost(self):
+    def cost(self, crit='worst'):
         r = self.get_root()
-        if len(self) == 1:
-            return self.vcost(r)
         tree_copy = self.copy()
-        cost = self.vcost(r) + max([DecisionTree(t).cost() for t in tree_copy.ccs(r)])
+        if crit=='worst':
+            if len(self) == 1:
+                return self.vcost(r)
+            cost = self.vcost(r) + max([DecisionTree(t).cost() for t in tree_copy.ccs(r)])
+        else:
+            w = self.sum_of('w')
+            contr_v = w*self.vcost(r)
+            if len(self) == 1:
+                return contr_v
+            cost = contr_v + sum([DecisionTree(t).cost('average') for t in tree_copy.ccs(r)])
         return cost
 
     def __lt__(self, other: Tree):
