@@ -75,7 +75,7 @@ def tree_search_cicalese_inspired(tree: Tree, t: int, base_algorithm):
 
 
 def calculate_ranking(tree: Tree, r, gbs: dict[int: int], lbu: dict[int: int]) -> int:
-    children = list(tree.successors(r))
+    children = list(tree.children(r))
     k = len(children)
     if k == 0:
         tree.nodes[r]['r'] = 0
@@ -212,6 +212,7 @@ def qptas_dereniowski_inspired(tree: Tree, epsilon=const) -> DecisionTree:
     if len(tree) == 0:
         return DecisionTree()
     tree_unchanged = copy.deepcopy(tree)
+    #tree.draw(attribute='c', type=float)
     tree = tree.reroot_by_min_attr('c')
     nodes = tree.nodes(data=True)
     max_val = max([node[1]['c'] for node in nodes])
@@ -224,15 +225,31 @@ def qptas_dereniowski_inspired(tree: Tree, epsilon=const) -> DecisionTree:
 
     p = ceil(const / epsilon)
     n = len(tree)
+    ranking_based_dt(tree)
+    r = tree.rank
+    d = p*p*(r+1)
     step = 1 / (p * n)
     c = step
-    step_index = int(round(c / step))
-    dt = build_strategy(copy.deepcopy(tree), p, c, n)
+    step_index = 0.0
+    dt = None
     while dt is None:
         step_index += 1
         c = step * step_index
-        dt = build_strategy(copy.deepcopy(tree), p, c, n)
-    # dt = dt.replace_excluded_queries(tree, excluded_queries=excluded_queries)
+        tree_copy = copy.deepcopy(tree)
+
+        def round_function(value):
+            return ceil_base(value, c) if value > p * c else ceil_base(value, 1 / (p * n))
+
+        tree_copy.round_values(round_function)
+        dt_a = dp_timelines_non_uni_costs(tree=tree_copy, p=p, c=c, n=n, depth=d)
+        if dt_a is not None:
+            contracted_tree = tree_copy.contracted_heavy_groups(p * c)
+            if contracted_tree is not None:
+                dt_lt = ranking_based_dt(contracted_tree)
+                dt = merge_dts(tree_copy, dt_a, [dt_lt])
+            else:
+                dt = dt_a
+                break
 
     for node in dt.nodes():
         dt.nodes[node]['c'] = tree_unchanged.nodes[node]['c']
@@ -244,93 +261,104 @@ def ceil_base(value, base):
     return val
 
 
-def build_strategy(tree: Tree, p, c, n) -> DecisionTree | None:
-    def round_function(value):
-        return ceil_base(value, c) if value > p * c else ceil_base(value, 1 / (p * n))
-
-    tree.round_values(round_function)
-
-    contracted_tree = tree.contracted_heavy_groups(p * c)
-    if contracted_tree is not None:
-        dt_lt = ranking_based_dt(contracted_tree)
+def merge_dts(tree: Tree, dt_a: DecisionTree, ft_lt: list[DecisionTree]) -> DecisionTree | None:
+    if len(ft_lt) == 1:
+        r = ft_lt[0].get_root()
+        ft_lt = ft_lt[0].ccs(r)
     else:
-        dt_lt = DecisionTree()
-
-    depth = p * p * (floor(log2(n)) + 1)
-    if tree.nodes[tree.get_root()]['c'] <= p * c:
-        dt = build_dt_lt_root(tree, dt_lt, p, c, n, depth)
-    else:
-        dt = build_dt_h_root(tree, dt_lt, p, c, n, depth)
-    return dt
-
-
-def build_dt_lt_root(tree: Tree, dt_lt: DecisionTree, p, c, n, depth) -> DecisionTree | None:
-    q = dt_lt.get_root()
+        r = dt_a.get_root()
     dt = DecisionTree()
-    data = tree.nodes(data=True)[q]
-    dt.add_node(q, **data)
-    responses = dt_lt.query(tree)
-    for cc, dt_lt_cc in responses.items():
-        cc = Tree(cc)
-        dt_lt_cc = DecisionTree(dt_lt_cc)
-        r_cc = cc.get_root()
-        if cc.nodes[r_cc]['c'] > p * c:
-            dt_cc = build_dt_h_root(cc, dt_lt_cc, p, c, n, depth)
-        else:
-            dt_cc = build_dt_lt_root(cc, dt_lt_cc, p, c, n, depth)
-        if dt_cc is None:
-            return None
-        dt.attach_subtree(dt_cc, q)
-    # if dt.cost() > c * depth:
-    #     return None
+    dt.add_node(r)
+    for h in tree.ccs(r):
+        h=Tree(h)
+        ft_lt_h = []
+        for dt_lt in ft_lt:
+            dt_lt = DecisionTree(dt_lt)
+            if  set(dt_lt.nodes()).issubset(h.nodes()):
+                ft_lt_h.append(dt_lt.restrict_to(h))
+        dt_a_h = dt_a.restrict_to(h)
+        dt_h = merge_dts(h, dt_a_h, ft_lt_h)
+        dt.attach_sub_dt(tree, h, dt_h)
     return dt
 
 
-def build_dt_h_root(tree: Tree, dt_lt: DecisionTree, p, c, n, depth) -> DecisionTree | None:
-    child_dts = {}
-    subtree = tree.copy()
-    forbidden_directions = {tree.get_root()}
-    ccs_dt_lt = list(nx.weakly_connected_components(dt_lt))
-    for cc_dt_lt_nodes in ccs_dt_lt:
-        cc_dt_lt = dt_lt.subgraph(cc_dt_lt_nodes)
-        while len(cc_dt_lt) > 0:
-            responses = cc_dt_lt.query(subtree, excluded_responses=forbidden_directions)
-            cc_dd_lt_root = cc_dt_lt.get_root()
-            forbidden_directions.add(cc_dd_lt_root)
-            dt_lt.remove_node(cc_dd_lt_root)
-            if len(responses) > 0:
-                child_dts[cc_dd_lt_root] = []
-                for response_tree, response_dt_lt in responses.items():
-                    response_tree = Tree(response_tree)
-                    response_dt_lt = DecisionTree(response_dt_lt)
-                    subtree.remove_nodes_from(response_tree.nodes())
-                    dt_lt.remove_nodes_from(response_dt_lt.nodes())
-                    if response_tree.nodes[response_tree.get_root()]['c'] > p * c:
-                        response_dt = build_dt_h_root(response_tree, response_dt_lt, p, c, n, depth)
-                    else:
-                        response_dt = build_dt_lt_root(response_tree, response_dt_lt, p, c, n, depth)
-                    if response_dt is None:
-                        return None
-                    child_dts[cc_dd_lt_root].append(response_dt)
-    dt = dp_timelines_non_uni_costs(tree=subtree, child_dts=child_dts, p=p, c=c, n=n, depth=depth)
-    return dt
 
 
-def dp_timelines_non_uni_costs(tree: Tree, child_dts: dict, p: int, c: float, n: int,
+
+
+# def build_dt_lt_root(tree: Tree, dt_lt: DecisionTree, p, c, n, depth) -> DecisionTree | None:
+#     q = dt_lt.get_root()
+#     dt = DecisionTree()
+#     data = tree.nodes(data=True)[q]
+#     dt.add_node(q, **data)
+#     responses = dt_lt.query(tree)
+#     for cc, dt_lt_cc in responses.items():
+#         cc = Tree(cc)
+#         dt_lt_cc = DecisionTree(dt_lt_cc)
+#         r_cc = cc.get_root()
+#         if cc.nodes[r_cc]['c'] > p * c:
+#             dt_cc = build_dt_h_root(cc, dt_lt_cc, p, c, n, depth)
+#         else:
+#             dt_cc = build_dt_lt_root(cc, dt_lt_cc, p, c, n, depth)
+#         if dt_cc is None:
+#             return None
+#         dt.attach_subtree(dt_cc, q)
+#     # if dt.cost() > c * depth:
+#     #     return None
+#     return dt
+
+
+# def build_dt_h_root(tree: Tree, dt_lt: DecisionTree, p, c, n, depth) -> DecisionTree | None:
+#     child_dts = {}
+#     subtree = tree.copy()
+#     forbidden_directions = {tree.get_root()}
+#     ccs_dt_lt = list(nx.weakly_connected_components(dt_lt))
+#     for cc_dt_lt_nodes in ccs_dt_lt:
+#         cc_dt_lt = dt_lt.subgraph(cc_dt_lt_nodes)
+#         while len(cc_dt_lt) > 0:
+#             responses = cc_dt_lt.query(subtree, excluded_responses=forbidden_directions)
+#             cc_dd_lt_root = cc_dt_lt.get_root()
+#             forbidden_directions.add(cc_dd_lt_root)
+#             dt_lt.remove_node(cc_dd_lt_root)
+#             if len(responses) > 0:
+#                 child_dts[cc_dd_lt_root] = []
+#                 for response_tree, response_dt_lt in responses.items():
+#                     response_tree = Tree(response_tree)
+#                     response_dt_lt = DecisionTree(response_dt_lt)
+#                     subtree.remove_nodes_from(response_tree.nodes())
+#                     dt_lt.remove_nodes_from(response_dt_lt.nodes())
+#                     if response_tree.nodes[response_tree.get_root()]['c'] > p * c:
+#                         response_dt = build_dt_h_root(response_tree, response_dt_lt, p, c, n, depth)
+#                     else:
+#                         response_dt = build_dt_lt_root(response_tree, response_dt_lt, p, c, n, depth)
+#                     if response_dt is None:
+#                         return None
+#                     child_dts[cc_dd_lt_root].append(response_dt)
+#     dt = dp_timelines_non_uni_costs(tree=subtree, child_dts=child_dts, p=p, c=c, n=n, depth=depth)
+#     return dt
+
+
+def dp_timelines_non_uni_costs(tree: Tree, p: int, c: float, n: int,
                                depth: int) -> DecisionTree | None:
     slot_size = (1 / (p * n))
     table = {}
 
     def retrieve(v, i, timeline) -> ExtendedDT:
-        if (v, i, str(timeline.get_loads())) in table:
-            return table[(v, i, str(timeline.get_loads()))]
+        loads = timeline.get_loads()
+        # for i in range(len(loads)):
+        #     load1= round(loads[i][0],5)
+        #     loads[i] = (load1, loads[i][1])
+        if (v, i, str(loads)) == (35, 1, '[(0.0, False), (0.5714285714285714, True), (0.5714285714285714, False)]'):
+            a = 0
+        if (v, i, str(loads)) in table:
+            return copy.deepcopy(table[(v, i, str(timeline.get_loads()))])
         else:
             dt = dp(v, i, timeline)
-            table[(v, i, str(timeline.get_loads()))] = dt
-            return dt
+            table[(v, i, str(loads))] = dt
+            return copy.deepcopy(dt)
 
     def dp(v: int, i: int, timeline: ExtendedDT) -> ExtendedDT | None:
-        print(str(c) + ", " + str(v) + ", " + str(i), str(timeline.get_loads()))
+        #print(str(c) + ", " + str(v) + ", " + str(i), str(timeline.get_loads()))
         if i == 0:
             return dp_no_children(v, timeline)
         if i == 1:
@@ -350,8 +378,7 @@ def dp_timelines_non_uni_costs(tree: Tree, child_dts: dict, p: int, c: float, n:
                 try:
                     dt = copy.deepcopy(timeline)
                     dt.put_query(box_index=box_index, slot_index=slot_index, query=v, cost=cost,
-                                 is_heavy=is_heavy, is_first=False,
-                                 right_dts=child_dts[v] if v in child_dts else None)
+                                 is_heavy=is_heavy, is_first=False)
                     if dt.cost() <= depth * c:
                         return dt
                     else:
@@ -369,9 +396,9 @@ def dp_timelines_non_uni_costs(tree: Tree, child_dts: dict, p: int, c: float, n:
                 try:
                     dtb = copy.deepcopy(timeline)
                     dtb.put_query(box_index=box_index, slot_index=slot_index, query=v, cost=cost,
-                                  is_heavy=is_heavy, is_first=False,
-                                  right_dts=child_dts[v] if v in child_dts else None)
-                    if dtb.cost() <= depth * c:
+                                  is_heavy=is_heavy, is_first=False)
+                    dt_cost = dtb.cost()
+                    if dt_cost <= depth * c:
                         loads = dtb.get_loads()
                         occupied_boxes = ceil((cost + slot_index * slot_size) / c)
                         for box_below in range(box_index + occupied_boxes, depth):
@@ -382,8 +409,12 @@ def dp_timelines_non_uni_costs(tree: Tree, child_dts: dict, p: int, c: float, n:
                         dtb2 = retrieve(v=u, i=outdegree, timeline=new_timeline)
                         if dtb2 is None:
                             continue
-                        dtb.merge(other=dtb2, box=box_index, query=v)
-                        if dtb.cost() <= depth * c:
+                        if v == 23 and box_index == 0:
+                            a = 0
+                        dtb2loads = dtb2.get_loads()
+                        dtb.merge(other=dtb2, box=box_index + occupied_boxes - 1, query=v)
+                        dtbcost = dtb.cost()
+                        if dtbcost <= depth * c:
                             candidate_dts.append(dtb)
                 except:
                     continue
@@ -391,24 +422,22 @@ def dp_timelines_non_uni_costs(tree: Tree, child_dts: dict, p: int, c: float, n:
 
     def dp_many_children(v: int, i: int, timeline: ExtendedDT) -> list[ExtendedDT | None]:
         candidate_dts = []
-        all_bipartitions = list(timeline.all_bipartitions())
-        for j in range(len(all_bipartitions)):
-            loads1, loads2 = all_bipartitions[j]
+        for loads1, loads2 in timeline.all_bipartitions():
             new_timeline = ExtendedDT(base=loads1, box_size=c, max_depth=depth, slot_size=slot_size)
+            loads = new_timeline.get_loads()
             dt1 = retrieve(v=v, i=i - 1, timeline=new_timeline)
             if dt1 is None:
                 continue
-            v_found = False
             v_box_index = None
-            for i in range(depth):
-                if not v_found:
-                    if v in dt1.query_sequence(i):
-                        v_found = True
-                        v_box_index = i
-                # else:
-                #     loads2 = 0.0
+            for j in range(depth):
+                if v in dt1.query_sequence(j):
+                    v_box_index = j
+            #loads2[v_box_index] = (loads2[v_box_index][0], False)
+            for j in range(v_box_index + 1, depth):
+                loads2[j] = (0.0, False)
             new_timeline = ExtendedDT(base=loads2, box_size=c, max_depth=depth, slot_size=slot_size)
-            u = tree.successors(v)[i - 1]
+            children = tree.children(v)
+            u = children[i - 1]
             outdegree = len(tree.children(u))
             dt2 = retrieve(v=u, i=outdegree, timeline=new_timeline)
             if dt2 is None:
@@ -420,7 +449,7 @@ def dp_timelines_non_uni_costs(tree: Tree, child_dts: dict, p: int, c: float, n:
 
     root = tree.get_root()
     timeline = ExtendedDT(box_size=c, max_depth=depth, slot_size=slot_size)
-    successors = list(tree.successors(root))
+    successors = list(tree.children(root))
     ext_dt = dp(v=root, i=len(successors), timeline=timeline)
     if ext_dt is not None:
         dt = ext_dt.to_decision_tree()
@@ -591,7 +620,7 @@ def centroid_dt(tree: Tree):
 
 def average_case_PTAS(tree: Tree, epsilon=1):
     n = len(tree)
-    depth = (1 + 1 / epsilon) * ceil(log2(n))
+    depth = ceil((1 + 1 / epsilon) * ceil(log2(n)))
     dt = dp_timelines_uni_costs(tree, depth, 'average')
     return dt
 
@@ -599,14 +628,15 @@ def average_case_PTAS(tree: Tree, epsilon=1):
 def average_case_FPTAS(tree: Tree, epsilon=1):
     n = len(tree)
     w_tree = tree.sum_of('w')
-    K = epsilon * w_tree / (n * n)
+    K = epsilon * w_tree / (n*min(n, ceil(w_tree*max(1,ceil(log(w_tree, 1.5)))))) # check if the alternative lower bound is correct
     prim_tree = tree.copy()
     for node in prim_tree.nodes():
         new_w = ceil(prim_tree.nodes[node]['w'] / K)
         prim_tree.nodes[node]['w'] = new_w
     w_prim_tree = prim_tree.sum_of('w')
-    # prim_tree.draw(attribute='w', type=float)
-    depth = ceil(log(3 / 2, w_prim_tree))
+    depth = max(1,ceil(log(w_prim_tree, 1.5)))
+    print(depth)
+    #prim_tree.draw(attribute='w', type=float)
     dt = dp_timelines_uni_costs(prim_tree, depth, 'average')
     for node in dt.nodes():
         new_w = tree.nodes[node]['w']
@@ -616,17 +646,23 @@ def average_case_FPTAS(tree: Tree, epsilon=1):
 
 def dp_timelines_uni_costs(tree, depth, crit) -> DecisionTree:
     table = {}
+    counter = 0
 
     def retrieve(v, i, timeline) -> ExtendedDT:
-        if (v, i, str(timeline.get_loads(False))) in table:
-            return table[(v, i, str(timeline.get_loads()))]
+        nonlocal counter
+        loads = timeline.get_loads()
+        loads = [int(load[0]) for load in loads]
+        if (v, i, str(loads)) in table:
+            return table[(v, i, str(loads))]
         else:
+            counter +=1
+            #print(counter)
             dt = dp(v, i, timeline)
-            table[(v, i, str(timeline.get_loads()))] = dt
+            table[(v, i, str(loads))] = dt
             return dt
 
     def dp(v: int, i: int, timeline: ExtendedDT) -> ExtendedDT | None:
-        print(str(v) + ", " + str(i), str(timeline.get_loads()))
+        #print(str(v) + ", " + str(i), str(timeline.get_loads()))
         if i == 0:
             return dp_no_children(v, timeline)
         if i == 1:
@@ -642,7 +678,7 @@ def dp_timelines_uni_costs(tree, depth, crit) -> DecisionTree:
         for box_index in range(depth):
             try:
                 dt = copy.deepcopy(timeline)
-                dt.put_query(box_index=box_index, slot_index=0, query=v, cost=1,
+                dt.put_query(box_index=box_index, slot_index=0, query=v, cost=1, weight = tree.nodes[v]['w'],
                              is_heavy=True, is_first=False)
                 return dt
             except:
@@ -655,10 +691,10 @@ def dp_timelines_uni_costs(tree, depth, crit) -> DecisionTree:
             try:
                 dtb = copy.deepcopy(timeline)
                 dtb.put_query(box_index=box_index, slot_index=0, query=v, cost=1,
-                              is_heavy=True, is_first=False)
+                              is_heavy=True, is_first=False, weight = tree.nodes[v]['w'])
                 loads = dtb.get_loads()
                 for box_below in range(box_index + 1, depth):
-                    loads[box_below] = (0.0, False)
+                    loads[box_below] = (0, False)
                 new_timeline = ExtendedDT(base=loads, max_depth=depth)
                 u = tree.children(v)[0]
                 outdegree = len(tree.children(u))
@@ -673,24 +709,19 @@ def dp_timelines_uni_costs(tree, depth, crit) -> DecisionTree:
 
     def dp_many_children(v: int, i: int, timeline: ExtendedDT) -> list[ExtendedDT | None]:
         candidate_dts = []
-        all_bipartitions = list(timeline.all_bipartitions())
-        for j in range(len(all_bipartitions)):
-            loads1, loads2 = all_bipartitions[j]
+        for loads1, loads2 in timeline.all_bipartitions(trans = False):
             new_timeline = ExtendedDT(base=loads1, max_depth=depth)
             dt1 = retrieve(v=v, i=i - 1, timeline=new_timeline)
             if dt1 is None:
                 continue
-            v_found = False
             v_box_index = None
-            for i in range(depth):
-                if not v_found:
-                    if v in dt1.query_sequence(i):
-                        v_found = True
-                        v_box_index = i
-                # else:
-                #     loads2 = 0.0
+            for j in range(depth):
+                if v in dt1.query_sequence(j):
+                    v_box_index = j
+            for j in range(v_box_index + 1, depth):
+                loads2[j] = (0, False)
             new_timeline = ExtendedDT(base=loads2, max_depth=depth)
-            u = tree.successors(v)[i - 1]
+            u = tree.children(v)[i - 1]
             outdegree = len(tree.children(u))
             dt2 = retrieve(v=u, i=outdegree, timeline=new_timeline)
             if dt2 is None:
@@ -701,7 +732,7 @@ def dp_timelines_uni_costs(tree, depth, crit) -> DecisionTree:
 
     root = tree.get_root()
     timeline = ExtendedDT(max_depth=depth)
-    successors = list(tree.successors(root))
+    successors = list(tree.children(root))
     ext_dt = dp(v=root, i=len(successors), timeline=timeline)
     if ext_dt is not None:
         dt = ext_dt.to_decision_tree()

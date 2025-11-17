@@ -7,6 +7,8 @@ from tree import Tree
 
 class DecisionTree(Tree):
 
+
+
     def cost(self, crit='worst'):
         r = self.get_root()
         tree_copy = self.copy()
@@ -90,3 +92,28 @@ class DecisionTree(Tree):
     def append_costs(self, tree):
         for v in self.nodes():
             self.nodes[v]['c'] = tree.nodes[v]['c']
+
+    def restrict_to(self, tree):
+        r = self.get_root()
+        dt = DecisionTree()
+        if r in tree.nodes() or r in tree.nodes(data=True):
+            dt.add_node(r)
+            if len(tree) == 1:
+                return dt
+            for subtree, dt_s in self.query(tree, r).items():
+                subtree = Tree(subtree)
+                dt_s = DecisionTree(dt_s)
+                if len(subtree) == 0 or len(dt_s) == 0:
+                    continue
+                dt_r_s = dt_s.restrict_to(subtree)
+                if dt_r_s is not None:
+                    dt.attach_sub_dt(tree, subtree, dt_r_s)
+            return dt
+        else:
+            for dt_s in self.ccs(self.get_root()):
+                dt_s = DecisionTree(dt_s)
+                dt_r_s = dt_s.restrict_to(tree)
+                if dt_r_s is not None:
+                    return dt_r_s
+            return None
+

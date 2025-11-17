@@ -6,9 +6,11 @@ from decision_tree import DecisionTree
 import copy
 from itertools import product
 
+import networkx as nx
+
 
 class ExtendedDT(DecisionTree):
-    def __init__(self, base: any = None, box_size=1, max_depth=1, slot_size=1):
+    def __init__(self, base: any = None, box_size=1, max_depth=0, slot_size=1):
         super().__init__()
         if isinstance(base, ExtendedDT):
             self.box_size = base.box_size
@@ -21,6 +23,7 @@ class ExtendedDT(DecisionTree):
             # Copy edges
             for u, v, edge_data in base.edges(data=True):
                 self.add_edge(u, v, **copy.deepcopy(edge_data))
+        # if isinstance(base, )
         else:
             self.box_size = box_size
             self.max_depth = max_depth
@@ -32,22 +35,46 @@ class ExtendedDT(DecisionTree):
                     self.add_edge(i - 1, i)
         return
 
+    def get_subtree(self, v):
+        T = ExtendedDT()
+        T.box_size = self.box_size
+        T.max_depth = self.max_depth
+        T.slot_size = self.slot_size
+        T.graph.update(copy.deepcopy(self.graph))
+
+        def dfs(node):
+            if node in T.nodes:
+                return
+            # Dodaj węzeł z atrybutami
+            T.add_node(node, **copy.deepcopy(self.nodes[node]))
+            for child in self.successors(node):
+                dfs(child)
+                # Dodaj krawędź dopiero po odwiedzeniu dziecka
+                T.add_edge(node, child, **copy.deepcopy(self.edges[node, child]))
+
+        dfs(v)
+        return T
+
     def remove_query(self, query):
-        root = self.get_root()
-        self.nodes[root]['first'] = None
-        queries_with_right_right_dts = list(self.nodes(data=True)[root]['qs'].items())
-        for root_query_with_right_dts in queries_with_right_right_dts:
-            root_query = root_query_with_right_dts[0]
-            if query == root_query:
-                queries_with_right_right_dts.remove(root_query_with_right_dts)
-                self.nodes[root]['qs'] = queries_with_right_right_dts
-                if len(queries_with_right_right_dts) == 0:
-                    self.remove_node(root)
-                    if len(self) > 0:
-                        self.remove_query(query=query)
+        for box in self.nodes:
+            # self.nodes[root]['first'] = None
+            if self.nodes[box]['first'] == query:
+                self.nodes[box]['first'] = None
+            queries_with_right_right_dts = list(self.nodes(data=True)[box]['qs'].items())
+            for root_query_with_right_dts in queries_with_right_right_dts:
+                root_query = root_query_with_right_dts[0]
+                if query == root_query:
+                    queries_with_right_right_dts.remove(root_query_with_right_dts)
+                    self.nodes[box]['qs'] = {key: value for key, value in queries_with_right_right_dts}
+                    # if len(queries_with_right_right_dts) == 0:
+                    #     self.remove_node(box)
+                    #     if len(self) > 0:
+                    #         self.remove_query(query=query)
 
     def to_decision_tree(self) -> DecisionTree:
         root = self.get_root()
+        print("processed subtree")
+        self.print_tree()
         queries_with_right_right_dts = list(self.nodes(data=True)[root]['qs'].items())
         if len(queries_with_right_right_dts) == 0:
             self.remove_node(root)
@@ -58,19 +85,28 @@ class ExtendedDT(DecisionTree):
         if self.nodes[root]['first'] is not None:
             root_query_with_right_dts = self.nodes(data=True)[root]['first']
         else:
-            root_query_with_right_dts = queries_with_right_right_dts[0]
+            root_query_with_right_dts = min(
+                queries_with_right_right_dts,
+                key=lambda x: x[1]['c']
+            )
         root_query = root_query_with_right_dts[0]
         cost = root_query_with_right_dts[1]['c']
-        right_dts = root_query_with_right_dts[1]["right_dts"]
-        root_dt = {root_query: {'c': cost}}
-        dt = DecisionTree(root_dt)
+        right_dts = []
+        for box in range(root, self.max_depth):
+            if root_query in self.nodes[box]['qs']:
+                right_dts.extend(self.nodes[box]['qs'][root_query]['right_dts'])
+        dt = DecisionTree(root_query)
+        dt.nodes[root_query]['c']= cost
+        self.print_tree()
         self.remove_query(root_query)
+        self.print_tree()
         if len(self) > 0:
-            right_dts.append(self)
+            right_dts.insert(0, self)
         for sub_dt in right_dts:
             sub_dt = ExtendedDT(sub_dt)
             sub_dt_dt = sub_dt.to_decision_tree()
-            dt.attach_subtree(sub_dt_dt, root_dt)
+            dt.attach_subtree(sub_dt_dt, dt.get_root())
+        print(dt.nodes(data=True))
         return dt
 
     def cost(self, crit='worst'):
@@ -83,17 +119,15 @@ class ExtendedDT(DecisionTree):
         self_copy.remove_node(box)
         if crit == 'worst':
             cost_left = self_copy.cost() if box < self.max_depth - 1 else 0
-            return max(cost_left+self.box_size, (max(sub_dt.cost(crit) for sub_dt in sub_dts) if len(sub_dts) == 0 else 0))
+            return max(cost_left+self.box_size, max(sub_dt.cost(crit) for sub_dt in sub_dts) if len(sub_dts) > 0 else 0)
         # TODO: check if this cost function is correct
         else:
             if box < self.max_depth - 1:
                 sub_dts.append(self_copy)
             return self.box_size * self.sum_of('w') + (
-                sum(sub_dt.cost(crit) for sub_dt in sub_dts) if len(sub_dts) == 0 else 0)
+                sum(sub_dt.cost(crit) for sub_dt in sub_dts) if len(sub_dts) > 0 else 0)
 
-    def put_query(self, box_index, slot_index, query, cost, is_heavy: bool, is_first=False, right_dts=None):
-        if right_dts is None:
-            right_dts = []
+    def put_query(self, box_index, slot_index, query, cost, is_heavy: bool, is_first=False, weight = 1):
         box = self.nodes(data=True)[box_index]
         new_qs = box['qs']
         load = box['load']
@@ -103,14 +137,14 @@ class ExtendedDT(DecisionTree):
             raise Exception
         else:
             if new_cost == 0:
-                new_qs[query] = {'c': cost, 'right_dts': right_dts}
+                new_qs[query] = {'c': cost, 'right_dts': [], 'w': weight}
                 box = {'load': load + contribution, 'qs': new_qs, 'trans': False,
                        'first': query if is_first else None}
             else:
                 if box['trans'] is True:
                     raise Exception
-                new_qs[query] = {'c': cost, 'right_dts': []}
-                self.put_query(box_index + 1, 0, query, new_cost, is_heavy, True, right_dts)
+                new_qs[query] = {'c': cost, 'right_dts': [], 'w': weight}
+                self.put_query(box_index + 1, 0, query, new_cost, is_heavy, True)
                 box = {'load': box['load'] + contribution, 'qs': new_qs, 'trans': True,
                        'first': query if is_first else None}
             self.nodes[box_index].update(box)
@@ -131,9 +165,9 @@ class ExtendedDT(DecisionTree):
                         options_for_box.append((j * self.slot_size, True))
                         options_for_box.append((j * self.slot_size, False))
             else:
-                options_for_box.append(True)
-                if not load:
-                    options_for_box.append(False)
+                options_for_box.append(1)
+                if load == 0:
+                    options_for_box.append(0)
 
             options.append(options_for_box)
         for combination in product(*options):
@@ -142,24 +176,47 @@ class ExtendedDT(DecisionTree):
                     (self.box_size - self.nodes[i]['load'] - combination[i][0],
                      not combination[i][1] or nodes[i]['trans'])
                     for i in range(self.max_depth)]
+                yield list(combination), combination2
             else:
                 combination2 = [
-                    not combination[i][0] or self.nodes[i]['load']
+                    (max(1 - combination[i], self.nodes[i]['load']), False)
                     for i in range(self.max_depth)]
-            yield combination, combination2
+                yield [(element, False) for element in combination], combination2
 
     def get_loads(self, trans=True) -> list[tuple[float, bool]] | list[bool]:
-        return [(node[1]['load'], node[1]['trans'] if trans else node[1]['load']) for node in self.nodes(data=True)]
+        nodes = self.nodes(data=True)
+        loads = []
+        for node in nodes:
+            load = (node[1]['load'], node[1]['trans'] if node[1]['trans'] is not None else False) if trans else node[1]['load']
+            loads.append(load)
+        return loads
 
     def merge(self, other: ExtendedDT, box: int, query):
-        for i in range(box + 1):
-            self.nodes[i]['load'] = self.nodes[i]['load'] + other.nodes[i]['load']
-            self.nodes[i]['qs'] = self.nodes[i]['qs'] | other.nodes[i]['qs']
-            self.nodes[i]['trans'] = self.nodes[i]['trans'] or other.nodes[i]['trans']
-            self.nodes[i]['trans'] = self.nodes[i]['first'] if self.nodes[i]['first'] is not None else other.nodes[i][
-                'first']
+        # print("merging:")
+        # self.print_tree()
+        # print("with:")
+        # other.print_tree()
+        # print(f"around query {query} at box: {box}")
         rotated_subtree = other.get_subtree(box)
-        self.nodes[box]['qs'][query].append(rotated_subtree)
+        rotated_subtree = ExtendedDT(rotated_subtree)
+        # print("rotated:")
+        # rotated_subtree.print_tree()
+        for q in list(other.nodes[box]['qs']):
+            if box > 0 and q in other.nodes[box - 1]['qs'] or other.nodes[box]['qs'][q]['c'] <= self.nodes[box]['qs'][query]['c']:
+                rotated_subtree.remove_query(q)
+            else:
+                other.nodes[box]['qs'].pop(q)
+        for i in range(box + 1):
+            self.nodes[i]['load'] = other.nodes[i]['load']
+            self.nodes[i]['qs'] = self.nodes[i]['qs'] | other.nodes[i]['qs']
+            self.nodes[i]['trans'] = self.nodes[i]['trans'] if self.nodes[i]['trans'] is not None else other.nodes[i]['trans']
+            self.nodes[i]['first'] = self.nodes[i]['first'] if self.nodes[i]['first'] is not None else other.nodes[i][
+                'first']
+        # print("aligned:")
+        # self.print_tree()
+        self.nodes[box]['qs'][query]['right_dts'].append(rotated_subtree)
+        # print("result:")
+        # self.print_tree()
 
     def query_sequence(self, box):
         return [node for node in self.nodes[box]['qs']]
@@ -178,3 +235,27 @@ class ExtendedDT(DecisionTree):
             sub_dts.append(self_copy)
         return sum_of_f + (
             sum(sub_dt.sum_of(f) for sub_dt in sub_dts) if len(sub_dts) == 0 else 0)
+
+    def print_tree(self, node=None, indent=1):
+        """
+        Rekurencyjny print drzewa ExtendedDT wraz z poddrzewami right_dts.
+        """
+        if node is None:
+            node = self.get_root()
+
+        attrs = self.nodes[node]
+        indent_str = "  " * indent
+        print(
+            f"{indent_str}- Box {node}: load={attrs.get('load', '?')}, trans={attrs.get('trans', '?')}, first={attrs.get('first', '?')}")
+
+        # Wypisz zapytania i poddrzewa right_dts
+        for query, qdata in attrs.get('qs', {}).items():
+            print(f"{indent_str}  * Query {query}: cost={qdata['c']}")
+            for i, sub_dt in enumerate(qdata.get('right_dts', [])):
+                print(f"{indent_str}    - Right DT {i}:")
+                sub_dt.print_tree(indent=indent + 3)  # zwiększone wcięcie dla poddrzewa
+
+        # Rekurencyjnie wypisz dzieci w grafie (następcy)
+        for child in self.successors(node):
+            self.print_tree(child, indent + 1)
+

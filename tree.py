@@ -360,7 +360,17 @@ class Tree(nx.DiGraph):
                 self.nodes[node][attribute] = new_value
 
     def get_subtree(self, v):
-        return copy.deepcopy(nx.dfs_tree(self, source=v))
+        T = Tree(nx.dfs_tree(self, source=v))
+
+        # Skopiuj atrybuty węzłów
+        for node in T.nodes():
+            if node in self.nodes:
+                T.nodes[node].update(self.nodes[node])
+
+        # Skopiuj atrybuty grafu (np. nazwa, typ, opis)
+        T.graph.update(self.graph)
+
+        return T
 
     def get_neighbors(self, v):
         pred = list(self.predecessors(v))
@@ -407,7 +417,7 @@ class Tree(nx.DiGraph):
         return sum(node[1][f] for node in nodes)
 
     def children(self, v):
-        return list(self.successors(v))
+        return sorted(list(self.successors(v)))
 
     @staticmethod
     def _normalize_w(tree):
