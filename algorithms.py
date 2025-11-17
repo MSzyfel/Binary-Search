@@ -42,6 +42,16 @@ def dp_tree(tree: Tree, nodes: list = None, dp=None):
     dp[tree.hash(nodes)] = copy.deepcopy(dc)
     return dc
 
+def dereniowski_inspired(tree: Tree) -> DecisionTree:
+    t = int(2 ** (sqrt(log2(len(tree)))))
+    dt1 = tree_search_cicalese_inspired(tree, t, qptas_dereniowski_inspired)
+    return dt1
+
+def cicalese_inspired(tree: Tree) -> DecisionTree:
+    t = int(log2(len(tree)))
+    dt1 = tree_search_cicalese_inspired(tree, t, dp_tree)
+    return dt1
+
 
 def tree_search_cicalese_inspired(tree: Tree, t: int, base_algorithm):
     if len(tree) <= t:

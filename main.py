@@ -20,8 +20,7 @@ for n in n_values:
     start_time = time.perf_counter()
 
     t = int(2 ** (sqrt(log2(len(T)))))
-    #dt1 = tree_search_cicalese_inspired(T, t, qptas_dereniowski_inspired)
-    dt1 = average_case_FPTAS(T)
+    dt1 = tree_search_cicalese_inspired(T, t, qptas_dereniowski_inspired)
 
     end_time = time.perf_counter()
 

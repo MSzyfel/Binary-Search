@@ -73,8 +73,8 @@ class ExtendedDT(DecisionTree):
 
     def to_decision_tree(self) -> DecisionTree:
         root = self.get_root()
-        print("processed subtree")
-        self.print_tree()
+        #print("processed subtree")
+        #self.print_tree()
         queries_with_right_right_dts = list(self.nodes(data=True)[root]['qs'].items())
         if len(queries_with_right_right_dts) == 0:
             self.remove_node(root)
@@ -97,9 +97,9 @@ class ExtendedDT(DecisionTree):
                 right_dts.extend(self.nodes[box]['qs'][root_query]['right_dts'])
         dt = DecisionTree(root_query)
         dt.nodes[root_query]['c']= cost
-        self.print_tree()
+        #self.print_tree()
         self.remove_query(root_query)
-        self.print_tree()
+        #self.print_tree()
         if len(self) > 0:
             right_dts.insert(0, self)
         for sub_dt in right_dts:
