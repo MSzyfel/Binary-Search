@@ -30,14 +30,37 @@ from tree import Tree
 
 def get_distributions():
     """Return available random distributions and their descriptions."""
-    rng = np.random.default_rng
+    
+    def make_uniform_dist(seed):
+        """Create uniform distribution generator."""
+        rng = np.random.default_rng(seed)
+        return lambda: rng.uniform(0.0, 1.0)
+    
+    def make_normal_dist(seed):
+        """Create normal distribution generator."""
+        rng = np.random.default_rng(seed)
+        return lambda: rng.normal(0.0, 1.0)
+    
+    def make_exponential_dist(seed):
+        """Create exponential distribution generator."""
+        rng = np.random.default_rng(seed)
+        return lambda: rng.exponential(1.0)
+    
+    def make_binomial_dist(seed):
+        """Create binomial distribution generator."""
+        rng = np.random.default_rng(seed)
+        return lambda: rng.binomial(10, 0.5)
+    
+    def make_constant_dist(seed):
+        """Create constant distribution generator."""
+        return lambda: 1.0
 
     distributions = {
-        "uniform": lambda seed=None: (lambda size=None, low=0.0, high=1.0: rng(seed).uniform(low=low, high=high, size=size)),
-        "normal": lambda seed=None: (lambda size=None, mean=0.0, std=1.0: rng(seed).normal(loc=mean, scale=std, size=size)),
-        "exponential": lambda seed=None: (lambda size=None, scale=1.0: rng(seed).exponential(scale=scale, size=size)),
-        "binomial": lambda seed=None: (lambda size=None, n=10, p=0.5: rng(seed).binomial(n=n, p=p, size=size)),
-        "constant": lambda seed=None: (lambda size=None, value=1.0: np.full(size, value)),
+        "uniform": make_uniform_dist,
+        "normal": make_normal_dist,
+        "exponential": make_exponential_dist,
+        "binomial": make_binomial_dist,
+        "constant": make_constant_dist,
     }
 
     descriptions = {
@@ -131,9 +154,26 @@ def generate_and_save(method_name: str, method_callable, n: int, instances: int,
                       outdir: Path, fmt: str, extra_kwargs: dict, seed_base: int | None, force: bool):
     """Generate and save instances for given method and size."""
     saved = 0
+    distributions, _ = get_distributions()
+    
     for i in range(instances):
         seed = (seed_base * 1000003 + n * 1009 + i) % (2**31 - 1) if seed_base is not None else None
-        kwargs_local = dict(extra_kwargs, seed=seed) if seed is not None else dict(extra_kwargs)
+        kwargs_local = dict(extra_kwargs)
+        
+        # Create distribution callables with unique seed for this instance
+        if "distribution_c_name" in kwargs_local:
+            dist_name = kwargs_local.pop("distribution_c_name")
+            dist_seed = (seed + 1) if seed is not None else None
+            kwargs_local["distribution_c"] = distributions[dist_name](dist_seed)
+        
+        if "distribution_w_name" in kwargs_local:
+            dist_name = kwargs_local.pop("distribution_w_name")
+            dist_seed = (seed + 2) if seed is not None else None
+            kwargs_local["distribution_w"] = distributions[dist_name](dist_seed)
+        
+        if seed is not None:
+            kwargs_local["seed"] = seed
+            
         basename = f"{method_name}_n{n}_inst{i}"
         outpath = outdir / f"{basename}.{fmt if fmt != 'json' else 'json'}"
 
@@ -205,11 +245,11 @@ def main():
     # Parse parameters
     params = parse_kv_params(args.params)
 
-    # Map distributions to callables
+    # Store distribution names (not callables) - will be created per instance with unique seed
     if args.distribution_c:
-        params["distribution_c"] = get_distributions()[0][args.distribution_c](args.seed)
+        params["distribution_c_name"] = args.distribution_c
     if args.distribution_w:
-        params["distribution_w"] = get_distributions()[0][args.distribution_w](args.seed)
+        params["distribution_w_name"] = args.distribution_w
 
     method_callable = methods[args.method]
     outdir = Path(args.outdir)
