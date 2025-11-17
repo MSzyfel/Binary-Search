@@ -36,6 +36,7 @@ def get_distributions():
         "uniform": lambda seed=None: (lambda size=None, low=0.0, high=1.0: rng(seed).uniform(low=low, high=high, size=size)),
         "normal": lambda seed=None: (lambda size=None, mean=0.0, std=1.0: rng(seed).normal(loc=mean, scale=std, size=size)),
         "exponential": lambda seed=None: (lambda size=None, scale=1.0: rng(seed).exponential(scale=scale, size=size)),
+        "binomial": lambda seed=None: (lambda size=None, n=10, p=0.5: rng(seed).binomial(n=n, p=p, size=size)),
         "constant": lambda seed=None: (lambda size=None, value=1.0: np.full(size, value)),
     }
 
@@ -43,6 +44,7 @@ def get_distributions():
         "uniform": "Uniform(0, 1) distribution",
         "normal": "Normal(0, 1) distribution",
         "exponential": "Exponential(scale=1.0) distribution",
+        "binomial": "Binomial(n=10, p=0.5) distribution",
         "constant": "Constant value distribution (all weights equal)",
     }
 

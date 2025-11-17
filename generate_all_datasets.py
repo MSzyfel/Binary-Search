@@ -28,6 +28,7 @@ DISTRIBUTIONS = {
     "uniform": "Rozkład jednostajny",
     "normal": "Rozkład normalny", 
     "exponential": "Rozkład wykładniczy",
+    "binomial": "Rozkład dwumianowy",
 }
 
 # Konfiguracje typów drzew
