@@ -90,7 +90,7 @@ with open(OUTPUT_FILE, mode="a", newline="") as csv_file:
     
     # Zapisz nagłówek tylko jeśli plik nie istnieje
     if not file_exists:
-        writer.writerow(["Filename", "NumNodes", "NumEdges", "ExecutionTime_s", f"SolutionCost({CRIT})", "Status"])
+        writer.writerow(["Filename", "NumNodes", "NumEdges", "WallTime_s", "CPUTime_s", f"SolutionCost({CRIT})", "Status"])
 
     for filename, filepath in files_to_process:
         try:
@@ -98,18 +98,22 @@ with open(OUTPUT_FILE, mode="a", newline="") as csv_file:
             G = read_graph_as_int_nodes(filepath)
             tree = Tree(G)
 
-            start_time = time.time()
+            start_wall_time = time.time()
+            start_cpu_time = time.process_time()
             dt = algorithm_func(G)
-            end_time = time.time()
-            exec_time = end_time - start_time
+            end_cpu_time = time.process_time()
+            end_wall_time = time.time()
+            
+            wall_time = end_wall_time - start_wall_time
+            cpu_time = end_cpu_time - start_cpu_time
 
             solution_cost = dt.cost(crit=CRIT) if isinstance(dt, DecisionTree) else None
 
-            writer.writerow([filename, G.number_of_nodes(), G.number_of_edges(), exec_time, solution_cost, "SUCCESS"])
+            writer.writerow([filename, G.number_of_nodes(), G.number_of_edges(), wall_time, cpu_time, solution_cost, "SUCCESS"])
             csv_file.flush()  # Zapisz na dysk natychmiast
             
             mark_file_processed(filepath)
-            print(f"✓ Completed {filename}: time={exec_time:.4f}s, cost({CRIT})={solution_cost}")
+            print(f"✓ Completed {filename}: wall_time={wall_time:.4f}s, cpu_time={cpu_time:.4f}s, cost({CRIT})={solution_cost}")
             
         except Exception as e:
             error_msg = str(e)
