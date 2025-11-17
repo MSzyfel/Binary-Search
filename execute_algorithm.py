@@ -44,12 +44,35 @@ parser = argparse.ArgumentParser(description="Uruchamianie algorytmów na grafac
 parser.add_argument("--graph_dir", type=str, default="generated_trees_d6", help="Katalog z grafami")
 parser.add_argument("--algorithm", type=str, default="ranking_based_dt", help="Algorytm do uruchomienia")
 parser.add_argument("--crit", type=str, default="worst", choices=["worst", "average"], help="Kryterium minimalizacji kosztu")
+parser.add_argument("--force", action="store_true", help="Usuń markery .processed/.error i przelicz wszystkie instancje od nowa")
 args = parser.parse_args()
 
 GRAPH_DIR = args.graph_dir
 ALGORITHM_NAME = args.algorithm
 CRIT = args.crit
 OUTPUT_FILE = os.path.join(GRAPH_DIR, "results.csv")
+
+# Jeśli --force, usuń wszystkie markery i plik wynikowy
+if args.force:
+    print(f"\n{'='*60}")
+    print(f"⚠️  FORCE MODE: Usuwam wszystkie markery i wyniki")
+    print(f"{'='*60}")
+    
+    # Usuń plik CSV z wynikami
+    if os.path.exists(OUTPUT_FILE):
+        os.remove(OUTPUT_FILE)
+        print(f"✓ Usunięto {OUTPUT_FILE}")
+    
+    # Usuń wszystkie markery .processed i .error
+    markers_removed = 0
+    for filename in os.listdir(GRAPH_DIR):
+        filepath = os.path.join(GRAPH_DIR, filename)
+        if filename.endswith(".processed") or filename.endswith(".error"):
+            os.remove(filepath)
+            markers_removed += 1
+    
+    print(f"✓ Usunięto {markers_removed} markerów")
+    print(f"{'='*60}\n")
 
 # ---------------- Mapowanie nazw do funkcji ----------------
 ALGORITHMS = {
