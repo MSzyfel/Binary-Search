@@ -9,16 +9,27 @@ from algorithms import *  # Tutaj importuj wszystkie algorytmy
 from tree import Tree
 from decision_tree import DecisionTree
 
-def read_graph_as_int_nodes(filepath):
-    """Wczytuje graf i konwertuje wierzchołki na int"""
-    if filepath.endswith(".graphml"):
-        G = nx.read_graphml(filepath)
-    else:
+def read_graph_as_tree(filepath):
+    """Wczytuje graf bezpośrednio jako Tree z poprawnymi atrybutami"""
+    if not filepath.endswith(".graphml"):
         raise ValueError(f"Unsupported format: {filepath}")
-
+    
+    # Wczytaj jako NetworkX
+    G = nx.read_graphml(filepath)
+    
+    # Konwertuj nazwy węzłów na int
     mapping = {v: int(v) for v in G.nodes()}
     G = nx.relabel_nodes(G, mapping)
-    return G
+    
+    # WAŻNE: Konwertuj atrybuty c i w na float PRZED przekazaniem do Tree
+    for node in G.nodes():
+        if 'c' in G.nodes[node]:
+            G.nodes[node]['c'] = float(G.nodes[node]['c'])
+        if 'w' in G.nodes[node]:
+            G.nodes[node]['w'] = float(G.nodes[node]['w'])
+    
+    # Stwórz Tree z grafu NetworkX (Tree skopiuje atrybuty)
+    return Tree(G)
 
 def is_file_processed(filepath):
     """Sprawdza czy plik został już przetworzony"""
@@ -55,13 +66,13 @@ OUTPUT_FILE = os.path.join(GRAPH_DIR, "results.csv")
 # Jeśli --force, usuń wszystkie markery i plik wynikowy
 if args.force:
     print(f"\n{'='*60}")
-    print(f"⚠️  FORCE MODE: Usuwam wszystkie markery i wyniki")
+    print(f"FORCE MODE: Usuwam wszystkie markery i wyniki")
     print(f"{'='*60}")
     
     # Usuń plik CSV z wynikami
     if os.path.exists(OUTPUT_FILE):
         os.remove(OUTPUT_FILE)
-        print(f"✓ Usunięto {OUTPUT_FILE}")
+        print(f"[OK] Usunięto {OUTPUT_FILE}")
     
     # Usuń wszystkie markery .processed i .error
     markers_removed = 0
@@ -71,21 +82,21 @@ if args.force:
             os.remove(filepath)
             markers_removed += 1
     
-    print(f"✓ Usunięto {markers_removed} markerów")
+    print(f"[OK] Usunięto {markers_removed} markerów")
     print(f"{'='*60}\n")
 
 # ---------------- Mapowanie nazw do funkcji ----------------
 ALGORITHMS = {
-    "dp_tree": lambda g: dp_tree(Tree(g)),
-    "ranking_based_dt": lambda g: ranking_based_dt(Tree(g)),
-    "k_up_modularity_algorithm": lambda g: k_up_modularity_algorithm(Tree(g)),
-    "qptas_dereniowski": lambda g: qptas_dereniowski_inspired(Tree(g)),
-    "dereniowski_inspired": lambda g: dereniowski_inspired(Tree(g)),
-    "cicalese_inspired": lambda g: cicalese_inspired(Tree(g)),
-    "centroid_dt": lambda g: centroid_dt(Tree(g)),
-    "average_case_trees_fptas": lambda g: average_case_trees_fptas(Tree(g)),
-    "average_case_PTAS": lambda g: average_case_PTAS(Tree(g)),
-    "average_case_FPTAS": lambda g: average_case_FPTAS(Tree(g)),
+    "dp_tree": lambda tree: dp_tree(tree),
+    "ranking_based_dt": lambda tree: ranking_based_dt(tree),
+    "k_up_modularity_algorithm": lambda tree: k_up_modularity_algorithm(tree),
+    "qptas_dereniowski": lambda tree: qptas_dereniowski_inspired(tree),
+    "dereniowski_inspired": lambda tree: dereniowski_inspired(tree),
+    "cicalese_inspired": lambda tree: cicalese_inspired(tree),
+    "centroid_dt": lambda tree: centroid_dt(tree),
+    "average_case_trees_fptas": lambda tree: average_case_trees_fptas(tree),
+    "average_case_PTAS": lambda tree: average_case_PTAS(tree),
+    "average_case_FPTAS": lambda tree: average_case_FPTAS(tree),
 }
 
 if ALGORITHM_NAME not in ALGORITHMS:
@@ -103,14 +114,15 @@ for filename in os.listdir(GRAPH_DIR):
         print(f"Skipping {filename} (already processed)")
         continue
     
-    # Wczytaj graf, aby uzyskać liczbę wierzchołków
+    # Wyciągnij rozmiar z nazwy pliku (np. random_star_n10_inst0.graphml -> 10)
     try:
-        G = read_graph_as_int_nodes(filepath)
-        num_nodes = G.number_of_nodes()
+        import re
+        match = re.search(r'_n(\d+)_', filename)
+        num_nodes = int(match.group(1)) if match else float('inf')
         files_to_process.append((filename, filepath, num_nodes))
     except Exception as e:
-        print(f"Warning: Could not read {filename} for sorting: {e}")
-        files_to_process.append((filename, filepath, float('inf')))  # Dodaj na koniec
+        print(f"Warning: Could not parse size from {filename}: {e}")
+        files_to_process.append((filename, filepath, float('inf')))
 
 # Sortuj pliki według liczby wierzchołków (najmniejsze najpierw)
 files_to_process.sort(key=lambda x: x[2])
@@ -128,26 +140,30 @@ with open(OUTPUT_FILE, mode="a", newline="") as csv_file:
 
     for filename, filepath, num_nodes in files_to_process:
         try:
-            print(f"\nProcessing {filename} (n={num_nodes})...")
-            G = read_graph_as_int_nodes(filepath)
-            tree = Tree(G)
+            print(f"\n[DEBUG] Processing {filename} (n={num_nodes})...")
+            print(f"[DEBUG] Reading graph from {filepath}")
+            tree_obj = read_graph_as_tree(filepath)
+            print(f"[DEBUG] Tree loaded: {tree_obj.n} nodes")
+            print(f"[DEBUG] Starting algorithm...")
 
             start_wall_time = time.time()
             start_cpu_time = time.process_time()
-            dt = algorithm_func(G)
+            dt = algorithm_func(tree_obj)
             end_cpu_time = time.process_time()
             end_wall_time = time.time()
+            
+            print(f"[DEBUG] Algorithm finished!")
             
             wall_time = end_wall_time - start_wall_time
             cpu_time = end_cpu_time - start_cpu_time
 
             solution_cost = dt.cost(crit=CRIT) if isinstance(dt, DecisionTree) else None
 
-            writer.writerow([filename, G.number_of_nodes(), G.number_of_edges(), wall_time, cpu_time, solution_cost, "SUCCESS"])
+            writer.writerow([filename, tree_obj.n, tree_obj.n - 1, wall_time, cpu_time, solution_cost, "SUCCESS"])
             csv_file.flush()  # Zapisz na dysk natychmiast
             
             mark_file_processed(filepath)
-            print(f"✓ Completed {filename}: wall_time={wall_time:.4f}s, cpu_time={cpu_time:.4f}s, cost({CRIT})={solution_cost}")
+            print(f"[OK] Completed {filename}: wall_time={wall_time:.4f}s, cpu_time={cpu_time:.4f}s, cost({CRIT})={solution_cost}")
             
         except Exception as e:
             error_msg = str(e)

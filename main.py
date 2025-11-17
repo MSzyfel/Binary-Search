@@ -7,7 +7,7 @@ from tree import Tree
 from algorithms import average_case_FPTAS, average_case_PTAS, tree_search_cicalese_inspired, qptas_dereniowski_inspired  # w razie potrzeby dodaj inne algorytmy
 
 # Lista n od 1 do 7
-n_values = list(range(20, 21))
+n_values = list(range(10, 11))
 execution_times = []
 
 for n in n_values:
@@ -21,6 +21,8 @@ for n in n_values:
 
     t = int(2 ** (sqrt(log2(len(T)))))
     dt1 = tree_search_cicalese_inspired(T, t, qptas_dereniowski_inspired)
+    dt1.draw(attribute='c', type=float)
+    print(f"Cost: {dt1.cost()}")
 
     end_time = time.perf_counter()
 

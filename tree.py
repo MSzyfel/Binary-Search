@@ -37,7 +37,7 @@ class Tree(nx.DiGraph):
             else:
                 self.add_nodes_from(base)
             return
-        super().__init__()
+        #super().__init__()
         if isinstance(base, nx.DiGraph | Tree):
             nodes = list(base.nodes.data())
             self.add_nodes_from(nodes)
