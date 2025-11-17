@@ -79,9 +79,20 @@ for filename in os.listdir(GRAPH_DIR):
     if is_file_processed(filepath):
         print(f"Skipping {filename} (already processed)")
         continue
-    files_to_process.append((filename, filepath))
+    
+    # Wczytaj graf, aby uzyskać liczbę wierzchołków
+    try:
+        G = read_graph_as_int_nodes(filepath)
+        num_nodes = G.number_of_nodes()
+        files_to_process.append((filename, filepath, num_nodes))
+    except Exception as e:
+        print(f"Warning: Could not read {filename} for sorting: {e}")
+        files_to_process.append((filename, filepath, float('inf')))  # Dodaj na koniec
 
-print(f"\nFound {len(files_to_process)} files to process")
+# Sortuj pliki według liczby wierzchołków (najmniejsze najpierw)
+files_to_process.sort(key=lambda x: x[2])
+
+print(f"\nFound {len(files_to_process)} files to process (sorted by number of nodes, smallest first)")
 
 # ---------------- Przygotowanie pliku CSV ----------------
 file_exists = os.path.exists(OUTPUT_FILE)
@@ -92,9 +103,9 @@ with open(OUTPUT_FILE, mode="a", newline="") as csv_file:
     if not file_exists:
         writer.writerow(["Filename", "NumNodes", "NumEdges", "WallTime_s", "CPUTime_s", f"SolutionCost({CRIT})", "Status"])
 
-    for filename, filepath in files_to_process:
+    for filename, filepath, num_nodes in files_to_process:
         try:
-            print(f"\nProcessing {filename}...")
+            print(f"\nProcessing {filename} (n={num_nodes})...")
             G = read_graph_as_int_nodes(filepath)
             tree = Tree(G)
 
