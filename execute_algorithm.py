@@ -3,6 +3,7 @@ import time
 import csv
 import argparse
 import networkx as nx
+import traceback
 
 from algorithms import *  # Tutaj importuj wszystkie algorytmy
 from tree import Tree
@@ -18,6 +19,25 @@ def read_graph_as_int_nodes(filepath):
     mapping = {v: int(v) for v in G.nodes()}
     G = nx.relabel_nodes(G, mapping)
     return G
+
+def is_file_processed(filepath):
+    """Sprawdza czy plik został już przetworzony"""
+    processed_marker = filepath + ".processed"
+    error_marker = filepath + ".error"
+    return os.path.exists(processed_marker) or os.path.exists(error_marker)
+
+def mark_file_processed(filepath):
+    """Oznacza plik jako pomyślnie przetworzony"""
+    marker = filepath + ".processed"
+    with open(marker, 'w') as f:
+        f.write(time.strftime("%Y-%m-%d %H:%M:%S"))
+
+def mark_file_error(filepath, error_msg):
+    """Oznacza plik jako zawierający błąd"""
+    marker = filepath + ".error"
+    with open(marker, 'w') as f:
+        f.write(f"Error occurred at: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Error: {error_msg}\n")
 
 # ---------------- Argumenty wiersza poleceń ----------------
 parser = argparse.ArgumentParser(description="Uruchamianie algorytmów na grafach w katalogu")
@@ -48,29 +68,59 @@ if ALGORITHM_NAME not in ALGORITHMS:
 
 algorithm_func = ALGORITHMS[ALGORITHM_NAME]
 
+# ---------------- Zbierz pliki do przetworzenia ----------------
+files_to_process = []
+for filename in os.listdir(GRAPH_DIR):
+    if not filename.endswith(".graphml"):
+        continue
+    filepath = os.path.join(GRAPH_DIR, filename)
+    if is_file_processed(filepath):
+        print(f"Skipping {filename} (already processed)")
+        continue
+    files_to_process.append((filename, filepath))
+
+print(f"\nFound {len(files_to_process)} files to process")
+
 # ---------------- Przygotowanie pliku CSV ----------------
-with open(OUTPUT_FILE, mode="w", newline="") as csv_file:
+file_exists = os.path.exists(OUTPUT_FILE)
+with open(OUTPUT_FILE, mode="a", newline="") as csv_file:
     writer = csv.writer(csv_file)
-    writer.writerow(["Filename", "NumNodes", "NumEdges", "ExecutionTime_s", f"SolutionCost({CRIT})"])
+    
+    # Zapisz nagłówek tylko jeśli plik nie istnieje
+    if not file_exists:
+        writer.writerow(["Filename", "NumNodes", "NumEdges", "ExecutionTime_s", f"SolutionCost({CRIT})", "Status"])
 
-    for filename in os.listdir(GRAPH_DIR):
-        if not filename.endswith(".graphml"):
-            continue
-
-        filepath = os.path.join(GRAPH_DIR, filename)
+    for filename, filepath in files_to_process:
         try:
+            print(f"\nProcessing {filename}...")
             G = read_graph_as_int_nodes(filepath)
+            tree = Tree(G)
+
+            start_time = time.time()
+            dt = algorithm_func(G)
+            end_time = time.time()
+            exec_time = end_time - start_time
+
+            solution_cost = dt.cost(crit=CRIT) if isinstance(dt, DecisionTree) else None
+
+            writer.writerow([filename, G.number_of_nodes(), G.number_of_edges(), exec_time, solution_cost, "SUCCESS"])
+            csv_file.flush()  # Zapisz na dysk natychmiast
+            
+            mark_file_processed(filepath)
+            print(f"✓ Completed {filename}: time={exec_time:.4f}s, cost({CRIT})={solution_cost}")
+            
         except Exception as e:
-            continue
+            error_msg = str(e)
+            trace = traceback.format_exc()
+            print(f"✗ Error processing {filename}: {error_msg}")
+            print(f"Traceback:\n{trace}")
+            
+            writer.writerow([filename, None, None, None, None, f"ERROR: {error_msg}"])
+            csv_file.flush()
+            
+            mark_file_error(filepath, trace)
 
-        tree = Tree(G)
-
-        start_time = time.time()
-        dt = algorithm_func(G)
-        end_time = time.time()
-        exec_time = end_time - start_time
-
-        solution_cost = dt.cost(crit=CRIT) if isinstance(dt, DecisionTree) else None
-
-        writer.writerow([filename, G.number_of_nodes(), G.number_of_edges(), exec_time, solution_cost])
-        print(f"Processed {filename}: time={exec_time:.4f}s, cost({CRIT})={solution_cost}")
+print(f"\n{'='*60}")
+print(f"Processing complete!")
+print(f"Results saved to: {OUTPUT_FILE}")
+print(f"{'='*60}")
