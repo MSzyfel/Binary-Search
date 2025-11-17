@@ -1,0 +1,10 @@
+# Binary Search Tree Algorithms - Requirements
+# Python 3.10+
+
+# Core dependencies
+networkx>=3.0
+numpy>=1.24.0
+matplotlib>=3.7.0
+
+# Optional: for enhanced graph visualization
+# pygraphviz>=1.11  # Requires graphviz installation
