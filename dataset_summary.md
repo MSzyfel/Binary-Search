@@ -1,5 +1,5 @@
 # Complete Dataset Generation Summary
-Generated at: 2025-11-17 22:50:35
+Generated at: 2025-11-18 19:20:05
 
 ## Results
 
@@ -17,11 +17,10 @@ Each tree type was generated with all combinations of:
 
 ## Details by Tree Type
 
-### balanced_binary
-- Method: random_balanced
+### basic
+- Method: random_basic
 - Size range: 10 - 100
 - Instances per size: 10
-- Parameters: m=2
 
   Distribution combinations:
   - cbinomial_wbinomial: SUCCESS

@@ -434,6 +434,33 @@ class Tree(nx.DiGraph):
                 tree.nodes[v]['c'] /= max_c
 
     @classmethod
+    def random_basic(cls, n: int, seed: int | None = None,
+                     distribution_c=None, distribution_w=None) -> 'Tree':
+        """
+        Generate a basic random tree using the default Tree constructor.
+        This uses nx.random_labeled_tree to create the structure.
+        
+        Parameters
+        ----------
+        n : int
+            Number of nodes.
+        seed : int, optional
+            Random seed.
+        distribution_c : callable, optional
+            Function returning random float for 'c' attribute.
+        distribution_w : callable, optional
+            Function returning random float for 'w' attribute.
+            
+        Returns
+        -------
+        Tree
+            Randomly generated basic tree with normalized attributes.
+        """
+        tree = cls(n=n, seed=seed, distribution_c=distribution_c, distribution_w=distribution_w)
+        cls._normalize_c(tree)
+        return tree
+
+    @classmethod
     def random_bounded_degree(cls, n: int, delta: int,
                               seed: int | None = None,
                               distribution_c=None,

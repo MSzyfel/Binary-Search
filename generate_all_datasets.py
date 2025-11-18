@@ -33,6 +33,14 @@ DISTRIBUTIONS = {
 
 # Konfiguracje typów drzew
 TREE_TYPES = {
+    "basic": {
+        "method": "random_basic",
+        "n_min": 10,
+        "n_max": 100,
+        "instances": 10,
+        "params": [],
+    },
+    
     "probabilistic_trees": {
         "method": "random_probabilistic",
         "n_min": 10,
