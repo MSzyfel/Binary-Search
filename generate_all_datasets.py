@@ -192,7 +192,7 @@ def generate_dataset(tree_type: str, config: dict, dist_c: str, dist_w: str,
     outdir = f"{BASE_DIR}/{tree_type}_c{dist_c}_w{dist_w}"
     
     print(f"\n{'='*70}")
-    print(f"🌳 Generating: {tree_type}")
+    print(f"[GEN] Generating: {tree_type}")
     print(f"   Distribution C (node costs): {dist_c}")
     print(f"   Distribution W (edge weights): {dist_w}")
     print(f"   Output: {outdir}")
@@ -222,10 +222,10 @@ def generate_dataset(tree_type: str, config: dict, dist_c: str, dist_w: str,
     
     try:
         result = subprocess.run(cmd, check=True, capture_output=False)
-        print(f"✅ Success: {tree_type} (c={dist_c}, w={dist_w})")
+        print(f"[OK] Success: {tree_type} (c={dist_c}, w={dist_w})")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ Failed: {tree_type} (c={dist_c}, w={dist_w})")
+        print(f"[ERROR] Failed: {tree_type} (c={dist_c}, w={dist_w})")
         print(f"Error: {e}")
         return False
 
@@ -338,15 +338,15 @@ def main():
     
     # Informacje początkowe
     print(f"\n{'='*70}")
-    print(f"🚀 Complete Dataset Generation Started")
+    print(f"[START] Complete Dataset Generation Started")
     print(f"{'='*70}")
-    print(f"📊 Tree types: {len(tree_types_to_generate)}")
-    print(f"📊 Distributions: {', '.join(distributions_to_use)}")
-    print(f"📊 Total datasets to generate: {total_datasets}")
-    print(f"🎲 Base seed: {args.seed}")
-    print(f"📁 Format: {args.format}")
-    print(f"📁 Base directory: {BASE_DIR}/")
-    print(f"🔄 Force overwrite: {args.force}")
+    print(f"[INFO] Tree types: {len(tree_types_to_generate)}")
+    print(f"[INFO] Distributions: {', '.join(distributions_to_use)}")
+    print(f"[INFO] Total datasets to generate: {total_datasets}")
+    print(f"[INFO] Base seed: {args.seed}")
+    print(f"[INFO] Format: {args.format}")
+    print(f"[INFO] Base directory: {BASE_DIR}/")
+    print(f"[INFO] Force overwrite: {args.force}")
     print(f"{'='*70}\n")
     
     # Stwórz katalog bazowy
@@ -382,20 +382,20 @@ def main():
     
     # Podsumowanie
     print(f"\n{'='*70}")
-    print(f"📊 Final Summary")
+    print(f"[SUMMARY] Final Summary")
     print(f"{'='*70}")
     
     success_count = sum(1 for v in results.values() if v)
-    print(f"✅ Successful: {success_count}/{len(results)}")
-    print(f"❌ Failed: {len(results) - success_count}/{len(results)}")
+    print(f"[OK] Successful: {success_count}/{len(results)}")
+    print(f"[FAIL] Failed: {len(results) - success_count}/{len(results)}")
     
     # Zapisz podsumowanie
     summary_path = Path(args.summary)
     generate_summary(results, summary_path)
     
-    print(f"\n✨ All done!\n")
-    print(f"📁 All datasets are in: {BASE_DIR}/")
-    print(f"📝 Summary: {summary_path}")
+    print(f"\n[DONE] All done!\n")
+    print(f"[INFO] All datasets are in: {BASE_DIR}/")
+    print(f"[INFO] Summary: {summary_path}")
 
 
 if __name__ == "__main__":

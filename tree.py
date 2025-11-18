@@ -424,6 +424,14 @@ class Tree(nx.DiGraph):
         total = sum(tree.nodes[v]['w'] for v in tree.nodes)
         for v in tree.nodes:
             tree.nodes[v]['w'] /= total
+    
+    @staticmethod
+    def _normalize_c(tree):
+        """Normalize costs so that max(c) = 1"""
+        max_c = max(tree.nodes[v]['c'] for v in tree.nodes)
+        if max_c > 0:
+            for v in tree.nodes:
+                tree.nodes[v]['c'] /= max_c
 
     @classmethod
     def random_bounded_degree(cls, n: int, delta: int,
@@ -501,6 +509,9 @@ class Tree(nx.DiGraph):
         # normalize weights
         for node in tree.nodes:
             tree.nodes[node]['w'] /= sum_w
+        
+        # normalize costs
+        cls._normalize_c(tree)
 
         return tree
 
@@ -598,6 +609,9 @@ class Tree(nx.DiGraph):
         # normalize weights
         for v in tree.nodes:
             tree.nodes[v]['w'] /= sum_w
+        
+        # normalize costs
+        cls._normalize_c(tree)
 
         # sanity: diameter check (should be ≤ D)
         diam = nx.diameter(nx.Graph(tree))
@@ -655,6 +669,9 @@ class Tree(nx.DiGraph):
             sum_w += w
         for v in nodes:
             tree.nodes[v]['w'] /= sum_w
+        
+        # normalize costs
+        cls._normalize_c(tree)
 
         # Step 1: make root high-degree
         others = [v for v in nodes if v != root]
@@ -728,6 +745,9 @@ class Tree(nx.DiGraph):
             sum_w += w
         for v in nodes:
             tree.nodes[v]['w'] /= sum_w
+        
+        # normalize costs
+        cls._normalize_c(tree)
 
         # add path edges (directed from root forward)
         for i in range(D):
@@ -923,6 +943,9 @@ class Tree(nx.DiGraph):
         sum_w = sum(tree.nodes[v]['w'] for v in tree.nodes)
         for v in tree.nodes:
             tree.nodes[v]['w'] /= sum_w
+        
+        # Normalizacja kosztów
+        cls._normalize_c(tree)
 
         return tree
 
@@ -985,6 +1008,9 @@ class Tree(nx.DiGraph):
         sum_w = sum(tree.nodes[v]['w'] for v in tree.nodes)
         for v in tree.nodes:
             tree.nodes[v]['w'] /= sum_w
+        
+        # Normalizacja kosztów
+        cls._normalize_c(tree)
 
         return tree
 
@@ -1008,6 +1034,7 @@ class Tree(nx.DiGraph):
             tree.add_edge(0, i)
 
         cls._normalize_w(tree)
+        cls._normalize_c(tree)
         return tree
 
     @classmethod
@@ -1038,6 +1065,7 @@ class Tree(nx.DiGraph):
                 node_id += 1
 
         cls._normalize_w(tree)
+        cls._normalize_c(tree)
         return tree
 
     @classmethod
@@ -1069,6 +1097,7 @@ class Tree(nx.DiGraph):
             current_level = next_level
 
         cls._normalize_w(tree)
+        cls._normalize_c(tree)
         return tree
 
     @classmethod
@@ -1103,6 +1132,7 @@ class Tree(nx.DiGraph):
 
         tree.root = 0
         cls._normalize_w(tree)
+        cls._normalize_c(tree)
         return tree
 
     @classmethod
@@ -1150,6 +1180,7 @@ class Tree(nx.DiGraph):
 
         tree.root = 0
         cls._normalize_w(tree)
+        cls._normalize_c(tree)
         return tree
 
     @classmethod
@@ -1201,6 +1232,9 @@ class Tree(nx.DiGraph):
         total_w = sum(tree.nodes[v]['w'] for v in tree.nodes)
         for v in tree.nodes:
             tree.nodes[v]['w'] /= total_w
+        
+        # Normalizacja kosztów
+        cls._normalize_c(tree)
 
         return tree
 
@@ -1238,6 +1272,9 @@ class Tree(nx.DiGraph):
         total_w = sum(tree.nodes[v]['w'] for v in tree.nodes)
         for v in tree.nodes:
             tree.nodes[v]['w'] /= total_w
+        
+        # Normalizacja kosztów
+        cls._normalize_c(tree)
 
         return tree
 
@@ -1279,6 +1316,9 @@ class Tree(nx.DiGraph):
         total_w = sum(tree.nodes[v]['w'] for v in tree.nodes)
         for v in tree.nodes:
             tree.nodes[v]['w'] /= total_w
+        
+        # Normalizacja kosztów
+        cls._normalize_c(tree)
 
         return tree
 

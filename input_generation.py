@@ -270,7 +270,7 @@ def main():
         )
         total += count
 
-    print(f"\n✅ Done. Generated {total} graphs in {outdir.resolve()}\n")
+    print(f"\n[DONE] Generated {total} graphs in {outdir.resolve()}\n")
 
 
 if __name__ == "__main__":
