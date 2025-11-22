@@ -81,7 +81,7 @@ if args.force:
         if filename.endswith(".processed") or filename.endswith(".error"):
             os.remove(filepath)
             markers_removed += 1
-    
+
     print(f"[OK] Usunięto {markers_removed} markerów")
     print(f"{'='*60}\n")
 

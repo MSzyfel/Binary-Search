@@ -83,7 +83,7 @@ class Tree(nx.DiGraph):
         labels = sorted(labels)
         g_hash = 0
         node_iterator = 0
-        for i in range(0, labels[len(labels) - 1]):
+        for i in range(0, labels[len(labels) - 1] + 1):
             if nodes[node_iterator] == labels[i]:
                 g_hash = g_hash + 2 ** i
                 node_iterator = node_iterator + 1

@@ -19,11 +19,10 @@ def dp_tree(tree: Tree, nodes: list = None, dp=None):
     if nodes is None:
         nodes = tree.nodes()
     if len(tree) == 1:
-        nodes = list(tree.nodes(data=True))
-        v = nodes[0]
-        data = tree.nodes(data=True)[v[0]]
-        dt = DecisionTree()
-        dt.add_node(v[0], **data)
+        vertices = list(tree.nodes(data=True))
+        v = vertices[0]
+        dt = DecisionTree(v)
+        dp[tree.hash(nodes)] = copy.deepcopy(dt)
         return dt
     candidate_dts = []
     for v in tree.nodes(data=True):
@@ -34,7 +33,7 @@ def dp_tree(tree: Tree, nodes: list = None, dp=None):
             if cc_hash in dp:
                 dt_cc = copy.deepcopy(dp[cc_hash])
             else:
-                dt_cc = dp_tree(cc, nodes, dp)
+                dt_cc = copy.deepcopy(dp_tree(cc, nodes, dp))
             dt.attach_subtree(dt_cc, v)
         candidate_dts.append(dt)
 

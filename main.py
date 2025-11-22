@@ -4,10 +4,10 @@ import matplotlib.pyplot as plt
 import networkx as nx
 
 from tree import Tree
-from algorithms import average_case_FPTAS, average_case_PTAS, tree_search_cicalese_inspired, qptas_dereniowski_inspired  # w razie potrzeby dodaj inne algorytmy
+from algorithms import average_case_FPTAS, average_case_PTAS, dp_tree, tree_search_cicalese_inspired, qptas_dereniowski_inspired  # w razie potrzeby dodaj inne algorytmy
 
 # Lista n od 1 do 7
-n_values = list(range(10, 11))
+n_values = list(range (6, 7))
 execution_times = []
 
 for n in n_values:
@@ -20,7 +20,7 @@ for n in n_values:
     start_time = time.perf_counter()
 
     t = int(2 ** (sqrt(log2(len(T)))))
-    dt1 = tree_search_cicalese_inspired(T, t, qptas_dereniowski_inspired)
+    dt1 = dp_tree(T)
     dt1.draw(attribute='c', type=float)
     print(f"Cost: {dt1.cost()}")
 
