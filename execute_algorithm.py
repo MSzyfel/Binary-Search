@@ -86,9 +86,16 @@ if args.force:
     print(f"{'='*60}\n")
 
 # ---------------- Mapowanie nazw do funkcji ----------------
+def run_ranking_based_dt(tree):
+    """Uruchamia ranking_based_dt z jednorodymi kosztami (wszystkie c=1)"""
+    # Ustaw wszystkie koszty na 1
+    for node in tree.nodes():
+        tree.nodes[node]['c'] = 1.0
+    return ranking_based_dt(tree)
+
 ALGORITHMS = {
     "dp_tree": lambda tree: dp_tree(tree),
-    "ranking_based_dt": lambda tree: ranking_based_dt(tree),
+    "ranking_based_dt": lambda tree: run_ranking_based_dt(tree),
     "k_up_modularity_algorithm": lambda tree: k_up_modularity_algorithm(tree),
     "qptas_dereniowski": lambda tree: qptas_dereniowski_inspired(tree),
     "dereniowski_inspired": lambda tree: dereniowski_inspired(tree),
