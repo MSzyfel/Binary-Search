@@ -248,12 +248,12 @@ def main():
     # Parse parameters
     params = parse_kv_params(args.params)
     
-    # Add method-specific parameters
-    if args.delta is not None:
+    # Add method-specific parameters only if method uses them
+    if args.method == "random_bounded_degree" and args.delta is not None:
         params["delta"] = args.delta
-    if args.diameter is not None:
+    if args.method == "random_bounded_diameter" and args.diameter is not None:
         params["D"] = args.diameter
-    if args.legs is not None:
+    if args.method == "random_spider" and args.legs is not None:
         params["legs"] = args.legs
 
     # Store distribution names (not callables) - will be created per instance with unique seed
