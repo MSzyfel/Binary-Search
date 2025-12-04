@@ -7,6 +7,7 @@ Analizuje wyniki z pliku CSV i oblicza średnie czasy dla każdego rozmiaru graf
 Użycie:
     python analyze_results.py results.csv
     python analyze_results.py --all-datasets
+    python analyze_results.py --directory data_set
     python analyze_results.py results.csv --output analysis.csv
 """
 
@@ -40,7 +41,13 @@ def analyze_csv(csv_path):
                     num_nodes = int(row['NumNodes'])
                     wall_time = float(row['WallTime_s'])
                     cpu_time = float(row['CPUTime_s'])
-                    cost = float(row['SolutionCost(crit)']) if row['SolutionCost(crit)'] else None
+                    
+                    # Sprawdź, która kolumna z kosztem istnieje
+                    cost = None
+                    if 'SolutionCost(crit)' in row and row['SolutionCost(crit)']:
+                        cost = float(row['SolutionCost(crit)'])
+                    elif 'SolutionCost(worst)' in row and row['SolutionCost(worst)']:
+                        cost = float(row['SolutionCost(worst)'])
                     
                     stats[num_nodes]['wall_times'].append(wall_time)
                     stats[num_nodes]['cpu_times'].append(cpu_time)
@@ -64,10 +71,10 @@ def analyze_csv(csv_path):
 
 def compute_averages(stats):
     """
-    Oblicza średnie wartości dla każdego rozmiaru.
+    Oblicza średnie i maksymalne wartości dla każdego rozmiaru.
     
     Returns:
-        list: [(size, avg_cpu, count), ...]
+        list: [(size, avg_cpu, max_cpu, avg_cost, max_cost, count), ...]
     """
     results = []
     
@@ -75,25 +82,30 @@ def compute_averages(stats):
         data = stats[size]
         
         avg_cpu = sum(data['cpu_times']) / len(data['cpu_times']) if data['cpu_times'] else 0
+        max_cpu = max(data['cpu_times']) if data['cpu_times'] else 0
+        
+        avg_cost = sum(data['costs']) / len(data['costs']) if data['costs'] else 0
+        max_cost = max(data['costs']) if data['costs'] else 0
+        
         count = data['count']
         
-        results.append((size, avg_cpu, count))
+        results.append((size, avg_cpu, max_cpu, avg_cost, max_cost, count))
     
     return results
 
 
 def print_table(results, title="Analysis Results"):
     """Wyświetla wyniki w ładnej tabeli."""
-    print(f"\n{'='*60}")
-    print(f"{title:^60}")
-    print(f"{'='*60}")
-    print(f"{'Size':<10} {'Avg CPU Time (s)':<25} {'Count':<10}")
-    print(f"{'-'*60}")
+    print(f"\n{'='*100}")
+    print(f"{title:^100}")
+    print(f"{'='*100}")
+    print(f"{'Size':<6} {'Avg CPU (s)':<13} {'Max CPU (s)':<13} {'Avg Cost':<12} {'Max Cost':<12} {'Count':<10}")
+    print(f"{'-'*100}")
     
-    for size, avg_cpu, count in results:
-        print(f"{size:<10} {avg_cpu:<25.4f} {count:<10}")
+    for size, avg_cpu, max_cpu, avg_cost, max_cost, count in results:
+        print(f"{size:<6} {avg_cpu:<13.4f} {max_cpu:<13.4f} {avg_cost:<12.2f} {max_cost:<12} {count:<10}")
     
-    print(f"{'='*60}\n")
+    print(f"{'='*100}\n")
 
 
 def save_to_csv(results, output_path):
@@ -101,10 +113,10 @@ def save_to_csv(results, output_path):
     try:
         with open(output_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(['Size', 'AvgCPUTime_s', 'InstanceCount'])
+            writer.writerow(['Size', 'AvgCPUTime_s', 'MaxCPUTime_s', 'AvgCost', 'MaxCost', 'InstanceCount'])
             
-            for size, avg_cpu, count in results:
-                writer.writerow([size, f"{avg_cpu:.6f}", count])
+            for size, avg_cpu, max_cpu, avg_cost, max_cost, count in results:
+                writer.writerow([size, f"{avg_cpu:.6f}", f"{max_cpu:.6f}", f"{avg_cost:.2f}", int(max_cost), count])
         
         print(f"[OK] Results saved to: {output_path}")
         return True
@@ -114,15 +126,17 @@ def save_to_csv(results, output_path):
         return False
 
 
-def find_all_result_files(base_dir="data_set"):
-    """Znajduje wszystkie pliki results.csv w podfolderach."""
+def find_all_result_files(base_dir):
+    """Znajduje wszystkie pliki CSV w podfolderach."""
     base_path = Path(base_dir)
     if not base_path.exists():
+        print(f"[ERROR] Directory not found: {base_dir}")
         return []
     
     result_files = []
-    for result_file in base_path.rglob("results.csv"):
-        result_files.append(result_file)
+    # Znajdź wszystkie pliki CSV (nie tylko results.csv)
+    for csv_file in base_path.rglob("*.csv"):
+        result_files.append(csv_file)
     
     return sorted(result_files)
 
@@ -139,22 +153,28 @@ def main():
                         help="Save analysis results to CSV file")
     parser.add_argument("--all-datasets", action="store_true",
                         help="Analyze all results.csv files in data_set/ subfolders")
+    parser.add_argument("--directory", "-d", type=str,
+                        help="Analyze all results.csv files in specified directory")
     
     args = parser.parse_args()
     
-    if args.all_datasets:
-        # Analizuj wszystkie pliki results.csv w data_set
-        print("\n[INFO] Searching for results.csv files in data_set/...")
-        result_files = find_all_result_files()
+    if args.all_datasets or args.directory:
+        # Analizuj wszystkie pliki results.csv w podanym katalogu
+        base_dir = args.directory if args.directory else "data_set"
+        
+        print(f"\n[INFO] Searching for results.csv files in {base_dir}/...")
+        result_files = find_all_result_files(base_dir)
         
         if not result_files:
-            print("[ERROR] No results.csv files found in data_set/")
+            print(f"[ERROR] No results.csv files found in {base_dir}/")
             return 1
         
         print(f"[INFO] Found {len(result_files)} result files\n")
         
         for result_file in result_files:
-            dataset_name = result_file.parent.name
+            # Użyj nazwy pliku bez rozszerzenia jako nazwy datasetu
+            dataset_name = result_file.stem  # filename bez .csv
+            
             print(f"\n{'='*80}")
             print(f"Dataset: {dataset_name}")
             print(f"File: {result_file}")
@@ -172,7 +192,9 @@ def main():
             print_table(results, title=f"Analysis for {dataset_name}")
             
             if args.output:
-                output_name = f"analysis_{dataset_name}.csv"
+                output_dir = Path(args.output)
+                output_dir.mkdir(parents=True, exist_ok=True)
+                output_name = output_dir / f"analysis_{dataset_name}.csv"
                 save_to_csv(results, output_name)
     
     elif args.csv_file:
