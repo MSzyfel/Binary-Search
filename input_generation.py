@@ -235,6 +235,9 @@ def main():
     parser.add_argument("--params", "-p", nargs="*", help="Extra parameters in key=value format (e.g. delta=3 D=4).")
     parser.add_argument("--seed", type=int, default=None, help="Base random seed (optional).")
     parser.add_argument("--force", action="store_true", help="Overwrite existing files if they exist.")
+    parser.add_argument("--delta", type=int, default=3, help="Max degree for random_bounded_degree (default: 3).")
+    parser.add_argument("--diameter", type=int, default=6, help="Max diameter for random_bounded_diameter (default: 6).")
+    parser.add_argument("--legs", type=int, default=4, help="Number of legs for random_spider (default: 4).")
     parser.add_argument("--distribution-c", choices=distributions.keys(),
                         help="Distribution used for node costs.")
     parser.add_argument("--distribution-w", choices=distributions.keys(),
@@ -244,6 +247,14 @@ def main():
 
     # Parse parameters
     params = parse_kv_params(args.params)
+    
+    # Add method-specific parameters
+    if args.delta is not None:
+        params["delta"] = args.delta
+    if args.diameter is not None:
+        params["D"] = args.diameter
+    if args.legs is not None:
+        params["legs"] = args.legs
 
     # Store distribution names (not callables) - will be created per instance with unique seed
     if args.distribution_c:
