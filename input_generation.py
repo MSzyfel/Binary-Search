@@ -154,7 +154,11 @@ def generate_and_save(method_name: str, method_callable, n: int, instances: int,
                       outdir: Path, fmt: str, extra_kwargs: dict, seed_base: int | None, force: bool):
     """Generate and save instances for given method and size."""
     saved = 0
+    skipped = 0
+    failed = 0
     distributions, _ = get_distributions()
+    
+    print(f"[n={n}] Generating {instances} instances...", end=" ", flush=True)
     
     for i in range(instances):
         seed = (seed_base * 1000003 + n * 1009 + i) % (2**31 - 1) if seed_base is not None else None
@@ -178,7 +182,7 @@ def generate_and_save(method_name: str, method_callable, n: int, instances: int,
         outpath = outdir / f"{basename}.{fmt if fmt != 'json' else 'json'}"
 
         if outpath.exists() and not force:
-            print(f"[SKIP] {outpath} exists (use --force to overwrite).")
+            skipped += 1
             continue
 
         try:
@@ -196,8 +200,11 @@ def generate_and_save(method_name: str, method_callable, n: int, instances: int,
             save_metadata(meta, outdir, basename)
             saved += 1
         except Exception as e:
-            print(f"[WARN] Failed to generate/save (n={n}, inst={i}): {e}")
+            failed += 1
+            if failed <= 3:  # Show only first 3 errors per size
+                print(f"\n[WARN] Failed (n={n}, inst={i}): {e}", flush=True)
 
+    print(f"saved={saved}, skipped={skipped}, failed={failed}", flush=True)
     return saved
 
 
@@ -267,7 +274,11 @@ def main():
     outdir.mkdir(parents=True, exist_ok=True)
 
     total = 0
-    for n in range(args.n_min, args.n_max + 1):
+    n_count = args.n_max - args.n_min + 1
+    print(f"\n[START] Generating {args.instances} instances per size for n={args.n_min}..{args.n_max} ({n_count} sizes)")
+    print(f"[INFO] Method: {args.method}, Output: {outdir.resolve()}\n")
+    
+    for idx, n in enumerate(range(args.n_min, args.n_max + 1), 1):
         count = generate_and_save(
             method_name=args.method,
             method_callable=method_callable,
